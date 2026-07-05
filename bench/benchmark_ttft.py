@@ -48,7 +48,12 @@ FILLER = (
 def build_prompts(tokenizer, n_tokens: int, count: int, cache_mode: str):
     """Return `count` prompt strings, each exactly `n_tokens` tokens long."""
     nonce_tokens = 8  # tokens reserved for the unique nonce
-    base_ids = tokenizer(FILLER * 200, add_special_tokens=False).input_ids
+    # scale the filler pool with the request; FILLER is ~35-40 tokens, so
+    # a fixed *200 (~7.5k tokens) silently truncated 8k/16k prompts
+    reps = max(200, n_tokens // 20)
+    base_ids = tokenizer(FILLER * reps, add_special_tokens=False).input_ids
+    if len(base_ids) < n_tokens:
+        raise ValueError(f"filler pool too small: {len(base_ids)} < {n_tokens}")
 
     prompts = []
     for _ in range(count):
