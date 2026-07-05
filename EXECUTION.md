@@ -74,13 +74,13 @@ forward). All three engines are compared on the one model they all support.
 
 ```bash
 # server pane — model 1 (classic transformer):
-vllm serve Qwen/Qwen3-4B-Instruct-2507 --max-model-len 16384 --disable-log-requests
+vllm serve Qwen/Qwen3-4B-Instruct-2507 --max-model-len 16384
 # client pane:
 python bench/benchmark_ttft.py --label arch-full-attn \
   --tokenizer Qwen/Qwen3-4B-Instruct-2507 \
   --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold
 # kill server; then model 2 (hybrid Gated DeltaNet), IDENTICAL flags:
-vllm serve Qwen/Qwen3.5-4B --max-model-len 16384 --disable-log-requests
+vllm serve Qwen/Qwen3.5-4B --max-model-len 16384
 python bench/benchmark_ttft.py --label arch-hybrid-gdn \
   --tokenizer Qwen/Qwen3.5-4B \
   --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold

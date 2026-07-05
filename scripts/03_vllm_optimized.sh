@@ -43,8 +43,7 @@ vllm serve "$MODEL" \
   --max-num-batched-tokens 8192 \
   --gpu-memory-utilization 0.92 \
   --enable-prefix-caching \
-  -O3 \
-  --disable-log-requests
+  -O3
 
 # Benchmark:
 #   python bench/benchmark_ttft.py --label vllm-optimized --url http://localhost:8000

@@ -93,7 +93,7 @@ bash run_all.sh
 # header explains); benchmark it remotely, drop the CSV into results/, re-run analyze.
 
 # Tier B (architecture study), same server flags for both models:
-vllm serve Qwen/Qwen3.5-4B --max-model-len 16384 --disable-log-requests &
+vllm serve Qwen/Qwen3.5-4B --max-model-len 16384 &
 python bench/benchmark_ttft.py --label qwen35-4b-hybrid --tokenizer Qwen/Qwen3.5-4B \
     --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold
 

@@ -27,8 +27,7 @@ if [[ "$MODE" == "vanilla" ]]; then
   vllm serve "$MODEL" \
     --host 0.0.0.0 --port 8000 \
     --max-model-len 16384 \
-    --reasoning-parser qwen3 \
-    --disable-log-requests
+    --reasoning-parser qwen3
 else
   vllm serve "$MODEL" \
     --host 0.0.0.0 --port 8000 \
@@ -39,8 +38,7 @@ else
     --enable-prefix-caching \
     --kv-cache-dtype fp8 \
     --reasoning-parser qwen3 \
-    -O3 \
-    --disable-log-requests
+    -O3
 fi
 
 # Benchmark (other tmux pane):

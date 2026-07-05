@@ -11,10 +11,16 @@ nvidia-smi   # 4000 Ada: 20GB SM8.9 | L40S / RTX 6000 Ada: 48GB SM8.9 (FP8 OK)
 
 apt-get update -qq && apt-get install -y -qq tmux git > /dev/null || true
 
-pip install -U pip
-# Qwen3.5/3.6 hybrid (Gated DeltaNet) support needs vLLM >= 0.19
-pip install -U "vllm>=0.19.0"
-pip install -U aiohttp transformers pandas matplotlib numpy tabulate
+pip install -U pip uv
+# Qwen3.5/3.6 hybrid (Gated DeltaNet) support needs vLLM >= 0.19.
+# PINNED at 0.19.1: it is the LAST release whose PyPI wheel links CUDA 12
+# (pins torch 2.10; vLLM >= 0.20 pins torch 2.11 whose wheels are CUDA-13
+# builds needing driver >= r580 — RunPod pods run driver 550 = CUDA 12.4).
+# --torch-backend=cu128 pins the matching torch build explicitly.
+uv pip install --system --break-system-packages "vllm==0.19.1" --torch-backend=cu128
+# numpy<2.4: newer numpy breaks numba/mistral-common (vllm deps).
+# accelerate: required by the naive HF baseline's device_map="cuda".
+pip install -U aiohttp transformers pandas matplotlib "numpy<2.4" tabulate accelerate fastapi uvicorn
 # optional cross-check engine:  pip install -U "sglang[all]"
 
 # HF cache on the persistent volume so weights survive pod restarts

@@ -17,19 +17,27 @@ BENCH="python bench/benchmark_ttft.py --url http://localhost:8000"
 
 wait_ready() {
   echo "waiting for server..."
-  until curl -sf http://localhost:8000/v1/models > /dev/null; do sleep 2; done
-  sleep 3
+  for _ in $(seq 1 360); do
+    curl -sf http://localhost:8000/v1/models >/dev/null && { sleep 3; return 0; }
+    pgrep -f "vllm serve" >/dev/null || { echo "FATAL: vllm server process died during startup"; return 1; }
+    sleep 2
+  done
+  echo "FATAL: server never became ready"; return 1
 }
 
 run_case() {  # $1=label, rest = extra vllm flags
   local label="$1"; shift
   echo "=== $label ==="
-  vllm serve "$MODEL" --host 0.0.0.0 --port 8000 --max-model-len 8192 \
-      --disable-log-requests "$@" &
+  vllm serve "$MODEL" --host 0.0.0.0 --port 8000 --max-model-len 8192 "$@" &
   local pid=$!
   wait_ready
   $BENCH --label "$label"
   kill "$pid"; wait "$pid" 2>/dev/null || true
+  # wait until the port actually closes before starting the next server
+  for _ in $(seq 1 60); do
+    curl -sf http://localhost:8000/v1/models >/dev/null 2>&1 || break
+    sleep 2
+  done
   sleep 5
 }
 
