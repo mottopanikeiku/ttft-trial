@@ -18,9 +18,9 @@ pip install -U pip uv
 # builds needing driver >= r580 — RunPod pods run driver 550 = CUDA 12.4).
 # --torch-backend=cu128 pins the matching torch build explicitly.
 uv pip install --system --break-system-packages "vllm==0.19.1" --torch-backend=cu128
-# numpy<2.4: newer numpy breaks numba/mistral-common (vllm deps).
+# numpy<2.3: numba 0.61.x rejects numpy 2.3+; numba/mistral-common are vLLM deps.
 # accelerate: required by the naive HF baseline's device_map="cuda".
-pip install -U aiohttp transformers pandas matplotlib "numpy<2.4" tabulate accelerate fastapi uvicorn
+pip install -U aiohttp transformers pandas matplotlib "numpy<2.3" tabulate accelerate fastapi uvicorn
 # optional cross-check engine:  pip install -U "sglang[all]"
 
 # HF cache on the persistent volume so weights survive pod restarts

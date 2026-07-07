@@ -175,7 +175,8 @@ The method used throughout:
 | `bench/benchmark_ttft.py`, `bench/prefix_cache_sweep.py` | hard-fail empty streams / insufficient successful samples; warm up at measured concurrency; guard prefix-sweep fit | pre-baseline robustness review; avoid silent partial CSVs and NaN fits |
 | `bench/analyze.py`, `EXECUTION.md` | add label include/exclude filters and Tier-C separate result/plot directory runbook | prevent cross-model 4B/27B speedup comparisons when new baselines are added |
 | `README.md`, `REPORT.md`, `scripts/04_vllm_ablation.sh`, `scripts/06_qwen36_27b.sh`, `scripts/07_extras.sh` | align prose and launch modes with measured FP8-only recommendation; scope cp-512 conclusion; add text-only Tier-C vanilla prerequisite | consistency pass before new baselines |
+| `scripts/00_setup.sh` | tighten numpy pin from `<2.4` to `<2.3` | RunPod Tier-C setup pulled numpy 2.3.5; numba 0.61.x requires `<2.3` |
 
 Environment as finally pinned: `vllm 0.19.1` · `torch 2.10.0+cu128` ·
-`transformers (as resolved by vllm 0.19.1)` · `numpy < 2.4` · driver
+`transformers (as resolved by vllm 0.19.1)` · `numpy < 2.3` · driver
 550.127.05 (CUDA 12.4) · RTX 4000 Ada 20 GB (SM 8.9).
