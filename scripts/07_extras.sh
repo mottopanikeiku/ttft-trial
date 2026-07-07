@@ -2,10 +2,9 @@
 # ============================================================================
 # 07_extras.sh — two follow-up experiments after the Phase-2 matrix:
 #
-#  1) vllm-fp8-only: the FP8 checkpoint with OTHERWISE-VANILLA flags.
-#     scripts/03 changes five things at once (FP8, max-model-len, chunk
-#     budget, mem-util, -O3); this run isolates FP8's own contribution the
-#     same way scripts/04 isolated vanilla's features.
+#  1) vllm-legacy-flags: the old FP8 + extra-flag bundle. Keep it as ablation
+#     evidence only; scripts/03 is now the smaller FP8 config because this
+#     bundle did not beat default graph capture and regressed several cells.
 #
 #  2) Tier B architecture study (EXECUTION.md Phase 4): classic full
 #     attention (Qwen3-4B) vs hybrid Gated-DeltaNet (Qwen3.5-4B), IDENTICAL
@@ -38,10 +37,12 @@ stop_server() {
   sleep 8
 }
 
-echo "===================== vllm-fp8-only ====================="
-vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 --host 0.0.0.0 --port 8000 --max-model-len 16384 &
+echo "===================== vllm-legacy-flags ====================="
+vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 --host 0.0.0.0 --port 8000 \
+    --max-model-len 8192 --max-num-batched-tokens 8192 \
+    --gpu-memory-utilization 0.92 --enable-prefix-caching -O3 &
 if wait_ready; then
-  python bench/benchmark_ttft.py --label vllm-fp8-only --url http://localhost:8000 \
+  python bench/benchmark_ttft.py --label vllm-legacy-flags --url http://localhost:8000 \
       --tokenizer Qwen/Qwen3-4B-Instruct-2507-FP8
 fi
 stop_server

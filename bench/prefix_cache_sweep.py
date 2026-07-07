@@ -27,8 +27,10 @@ Run against the optimized vLLM server:
 
 import argparse
 import asyncio
+import math
 import random
 import string
+import sys
 import time
 
 import aiohttp
@@ -37,29 +39,48 @@ import numpy as np
 from benchmark_ttft import FILLER, one_request, pct
 
 
+def filler_ids(tokenizer, min_tokens):
+    reps = max(200, min_tokens // 20)
+    ids = tokenizer(FILLER * reps, add_special_tokens=False).input_ids
+    if len(ids) < min_tokens:
+        raise ValueError(f"filler pool too small: {len(ids)} < {min_tokens}")
+    return ids
+
+
 def make_prompt(tokenizer, shared_ids, uncached_tokens):
     nonce = "".join(random.choices(string.ascii_lowercase, k=24))
     nonce_ids = tokenizer(f"[{nonce}] ", add_special_tokens=False).input_ids[:8]
-    body = tokenizer(FILLER * 200, add_special_tokens=False).input_ids
+    body = filler_ids(tokenizer, uncached_tokens)
     tail = nonce_ids + body[: max(0, uncached_tokens - len(nonce_ids))]
     return tokenizer.decode(shared_ids + tail)
 
 
-async def measure(session, url, model, tokenizer, total, frac, n, max_tokens):
+async def measure(session, url, model, tokenizer, total, frac, n, max_tokens,
+                  min_success_rate):
     shared_len = int(total * frac)
-    base = tokenizer(FILLER * 200, add_special_tokens=False).input_ids
+    base = filler_ids(tokenizer, total)
     shared_ids = base[:shared_len]
     # prime the cache with the shared prefix (one throwaway request)
     await one_request(session, url, "completions", model,
                       make_prompt(tokenizer, shared_ids, total - shared_len),
                       max_tokens)
+    required = math.ceil(n * min_success_rate)
     ttfts = []
-    for _ in range(n):
-        ttft, _, _ = await one_request(
-            session, url, "completions", model,
-            make_prompt(tokenizer, shared_ids, total - shared_len), max_tokens)
-        if ttft is not None:
+    failures = []
+    for idx in range(n):
+        try:
+            ttft, _, _ = await one_request(
+                session, url, "completions", model,
+                make_prompt(tokenizer, shared_ids, total - shared_len), max_tokens)
             ttfts.append(ttft)
+        except Exception as e:
+            failures.append(str(e))
+            print(f"  request {idx} failed: {e}", file=sys.stderr)
+    if len(ttfts) < required:
+        raise RuntimeError(
+            f"cached={frac:.2f}: only {len(ttfts)}/{n} successful "
+            f"(< required {required}); failures={len(failures)}"
+        )
     return total - shared_len, ttfts
 
 
@@ -74,7 +95,11 @@ async def main():
     ap.add_argument("--holdout", type=float, default=0.60)
     ap.add_argument("--num-requests", type=int, default=16)
     ap.add_argument("--max-tokens", type=int, default=8)
+    ap.add_argument("--min-success-rate", type=float, default=0.90,
+                    help="minimum request success fraction required per sweep point")
     args = ap.parse_args()
+    if not 0 < args.min_success_rate <= 1:
+        raise SystemExit("--min-success-rate must be in (0, 1]")
 
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
@@ -92,16 +117,21 @@ async def main():
         for f in args.fractions:
             uncached, ttfts = await measure(session, args.url, model, tokenizer,
                                             args.total_tokens, f,
-                                            args.num_requests, args.max_tokens)
+                                            args.num_requests, args.max_tokens,
+                                            args.min_success_rate)
             p50 = pct(ttfts, 50)
             print(f"{f*100:8.0f}% | {uncached:12d} | {p50*1000:8.1f}ms | {pct(ttfts,90)*1000:7.1f}ms")
             xs.extend([uncached] * len(ttfts))
             ys.extend(ttfts)
 
+        if len(set(xs)) < 2:
+            raise RuntimeError("need at least two successful uncached-token points to fit")
         # ---- fit TTFT = a + b * uncached_tokens ----
         A = np.vstack([np.ones(len(xs)), np.array(xs)]).T
         (a, b), *_ = np.linalg.lstsq(A, np.array(ys), rcond=None)
         r2 = 1 - np.sum((A @ [a, b] - ys) ** 2) / np.sum((ys - np.mean(ys)) ** 2)
+        if not (np.isfinite(a) and np.isfinite(b) and np.isfinite(r2) and b > 0):
+            raise RuntimeError(f"invalid fit: a={a}, b={b}, r2={r2}")
 
         print("\n=== fitted model:  TTFT = a + b * uncached_tokens ===")
         print(f"  a (fixed overhead)          = {a*1000:.1f} ms")
@@ -112,7 +142,8 @@ async def main():
         # ---- holdout validation ----
         uncached, ttfts = await measure(session, args.url, model, tokenizer,
                                         args.total_tokens, args.holdout,
-                                        args.num_requests, args.max_tokens)
+                                        args.num_requests, args.max_tokens,
+                                        args.min_success_rate)
         pred = a + b * uncached
         meas = pct(ttfts, 50)
         err = abs(pred - meas) / meas * 100

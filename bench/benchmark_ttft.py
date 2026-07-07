@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import csv
 import json
+import math
 import os
 import random
 import string
@@ -87,6 +88,8 @@ async def one_request(session, url, api, model, prompt, max_tokens):
     buf = b""
     t0 = time.perf_counter()
     t_end = t0
+    malformed = 0
+    non_content = 0
 
     async with session.post(endpoint, json=payload) as resp:
         if resp.status != 200:
@@ -105,9 +108,11 @@ async def one_request(session, url, api, model, prompt, max_tokens):
                 try:
                     obj = json.loads(data)
                 except json.JSONDecodeError:
+                    malformed += 1
                     continue
                 choices = obj.get("choices") or []
                 if not choices:
+                    non_content += 1
                     continue
                 piece = (choices[0].get("text")
                          or (choices[0].get("delta") or {}).get("content")
@@ -117,6 +122,14 @@ async def one_request(session, url, api, model, prompt, max_tokens):
                     t_end = now
                     if ttft is None:
                         ttft = now - t0
+                else:
+                    non_content += 1
+
+    if ttft is None or n_chunks == 0:
+        raise RuntimeError(
+            "stream ended without generated text "
+            f"(malformed_data={malformed}, non_content_chunks={non_content})"
+        )
     return ttft, t_end - t0, n_chunks
 
 
@@ -127,6 +140,8 @@ async def run_config(session, args, model, prompts, concurrency, results, meta):
     queue = asyncio.Queue()
     for i, p in enumerate(prompts):
         queue.put_nowait((i, p))
+
+    failures = []
 
     async def worker():
         while True:
@@ -141,9 +156,12 @@ async def run_config(session, args, model, prompts, concurrency, results, meta):
                                 "request_idx": idx, "ttft_s": ttft,
                                 "e2e_s": e2e, "out_chunks": n})
             except Exception as e:
-                print(f"  request {idx} failed: {e}", file=sys.stderr)
+                msg = f"request {idx} failed: {e}"
+                failures.append(msg)
+                print(f"  {msg}", file=sys.stderr)
 
     await asyncio.gather(*[worker() for _ in range(concurrency)])
+    return len(prompts) - len(failures), failures
 
 
 def pct(vals, p):
@@ -168,9 +186,13 @@ async def main():
     ap.add_argument("--num-requests", type=int, default=24)
     ap.add_argument("--warmup", type=int, default=5)
     ap.add_argument("--max-tokens", type=int, default=16)
+    ap.add_argument("--min-success-rate", type=float, default=0.90,
+                    help="minimum measured request success fraction required per cell")
     ap.add_argument("--tokenizer", default="Qwen/Qwen3-4B-Instruct-2507")
     ap.add_argument("--out", default="results")
     args = ap.parse_args()
+    if not 0 < args.min_success_rate <= 1:
+        raise SystemExit("--min-success-rate must be in (0, 1]")
 
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
@@ -184,28 +206,53 @@ async def main():
         print(f"server={args.url} model={model} label={args.label}")
 
         results = []
+        bad_cells = []
         for cache_mode in args.cache_modes:
             for n_tok in args.prompt_tokens:
                 for conc in args.concurrency:
                     meta = {"label": args.label, "api": args.api,
                             "cache_mode": cache_mode, "prompt_tokens": n_tok}
-                    # warmup (also primes the shared prefix for warm mode)
-                    warm_prompts = build_prompts(tokenizer, n_tok, args.warmup, cache_mode)
-                    await run_config(session, args, model, warm_prompts, min(conc, 4), [], meta)
+                    min_successes = math.ceil(args.num_requests * args.min_success_rate)
+
+                    # warmup (also primes the shared prefix for warm mode). Use
+                    # the measured concurrency so c=16 does not include first-use
+                    # scheduler/CUDA-graph behavior in the measured rows.
+                    warm_count = max(args.warmup, conc) if args.warmup else 0
+                    if warm_count:
+                        warm_prompts = build_prompts(tokenizer, n_tok, warm_count, cache_mode)
+                        warm_ok, warm_failures = await run_config(
+                            session, args, model, warm_prompts, conc, [], meta)
+                        if warm_ok < warm_count:
+                            bad_cells.append(
+                                f"{cache_mode}/{n_tok}/c{conc} warmup: "
+                                f"{warm_ok}/{warm_count} successful"
+                            )
+
                     # measured
                     prompts = build_prompts(tokenizer, n_tok, args.num_requests, cache_mode)
                     t0 = time.perf_counter()
-                    await run_config(session, args, model, prompts, conc, results, meta)
+                    before = len(results)
+                    _, failures = await run_config(session, args, model, prompts, conc, results, meta)
                     dur = time.perf_counter() - t0
-                    ttfts = [r["ttft_s"] for r in results
-                             if r["cache_mode"] == cache_mode
-                             and r["prompt_tokens"] == n_tok
-                             and r["concurrency"] == conc
-                             and r["ttft_s"] is not None]
+                    cell_rows = results[before:]
+                    ttfts = [r["ttft_s"] for r in cell_rows if r["ttft_s"] is not None]
+                    status = "OK" if len(ttfts) >= min_successes else "FAILED"
+                    if status == "FAILED":
+                        bad_cells.append(
+                            f"{cache_mode}/{n_tok}/c{conc}: "
+                            f"{len(ttfts)}/{args.num_requests} successful "
+                            f"(< required {min_successes}); failures={len(failures)}"
+                        )
                     print(f"  {cache_mode:4s} | {n_tok:5d} tok | c={conc:2d} | "
                           f"p50={pct(ttfts,50)*1000:7.1f}ms  p90={pct(ttfts,90)*1000:7.1f}ms  "
-                          f"p99={pct(ttfts,99)*1000:7.1f}ms  ({len(ttfts)} ok, {dur:.1f}s)")
+                          f"p99={pct(ttfts,99)*1000:7.1f}ms  "
+                          f"({len(ttfts)}/{args.num_requests} ok, {dur:.1f}s, {status})")
 
+    if bad_cells:
+        print("\nFATAL: insufficient successful samples; not writing CSV.", file=sys.stderr)
+        for cell in bad_cells:
+            print(f"  - {cell}", file=sys.stderr)
+        raise SystemExit(1)
     os.makedirs(args.out, exist_ok=True)
     path = os.path.join(args.out, f"{args.label}.csv")
     with open(path, "w", newline="") as f:

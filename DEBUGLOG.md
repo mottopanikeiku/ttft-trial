@@ -171,6 +171,10 @@ The method used throughout:
 | `bench/benchmark_ttft.py` | scale filler pool with requested length + hard error if short | Incident 8 |
 | `README.md`, `EXECUTION.md` | update example commands for removed flag | Incident 5 |
 | `scripts/07_extras.sh` | new: FP8-isolation run + Tier-B architecture study, reusing hardened helpers | follow-ups to Phase 2 findings |
+| `scripts/03_vllm_optimized.sh`, `run_all.sh`, `results/legacy/` | promote measured `vllm-fp8-only` as optimized; archive old 5-flag `vllm-optimized` CSV outside analysis glob; remove default `-O3` path | Phase-2 evidence: FP8-only beat the 5-flag bundle in most cells and avoided large cold-concurrency regressions |
+| `bench/benchmark_ttft.py`, `bench/prefix_cache_sweep.py` | hard-fail empty streams / insufficient successful samples; warm up at measured concurrency; guard prefix-sweep fit | pre-baseline robustness review; avoid silent partial CSVs and NaN fits |
+| `bench/analyze.py`, `EXECUTION.md` | add label include/exclude filters and Tier-C separate result/plot directory runbook | prevent cross-model 4B/27B speedup comparisons when new baselines are added |
+| `README.md`, `REPORT.md`, `scripts/04_vllm_ablation.sh`, `scripts/06_qwen36_27b.sh`, `scripts/07_extras.sh` | align prose and launch modes with measured FP8-only recommendation; scope cp-512 conclusion; add text-only Tier-C vanilla prerequisite | consistency pass before new baselines |
 
 Environment as finally pinned: `vllm 0.19.1` · `torch 2.10.0+cu128` ·
 `transformers (as resolved by vllm 0.19.1)` · `numpy < 2.4` · driver

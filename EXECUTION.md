@@ -41,9 +41,10 @@ the harness prints per request — it is almost always the fix.
 ```bash
 bash run_all.sh
 ```
-This sequentially serves vanilla → three ablations → optimized(FP8), runs the
-full matrix (5 prompt lengths × 3 concurrencies × cold/warm × 24 requests)
-against each, runs the prefix-cache sweep, then builds tables and plots.
+This sequentially serves vanilla → three ablations → promoted optimized
+(`vllm-fp8-only`), runs the full matrix (5 prompt lengths × 3 concurrencies ×
+cold/warm × 24 target requests) against each, runs the prefix-cache sweep, then
+builds tables and plots.
 Watch the per-config lines it prints; sanity-check monotonicity (TTFT should
 grow with prompt length in cold mode and be ~flat in warm mode).
 
@@ -101,29 +102,35 @@ tmux new -s ttft
 git clone https://github.com/<you>/ttft-trial && cd ttft-trial
 bash scripts/00_setup.sh tier-c              # downloads Qwen3.6-27B-FP8 (~27GB)
 
+mkdir -p results_tier_c plots_tier_c
+
 bash scripts/06_qwen36_27b.sh vanilla &      # pane 1
 python bench/benchmark_ttft.py --label qwen36-27b-vanilla \
-  --tokenizer Qwen/Qwen3.6-27B-FP8           # pane 2
-kill %1; sleep 10
+  --tokenizer Qwen/Qwen3.6-27B-FP8 --out results_tier_c
+pkill -f "vllm serve"; sleep 10
 
 bash scripts/06_qwen36_27b.sh optimized &
 python bench/benchmark_ttft.py --label qwen36-27b-optimized \
-  --tokenizer Qwen/Qwen3.6-27B-FP8
+  --tokenizer Qwen/Qwen3.6-27B-FP8 --out results_tier_c
 python bench/prefix_cache_sweep.py --tokenizer Qwen/Qwen3.6-27B-FP8 \
-  | tee results/prefix_sweep_27b.txt
-python bench/analyze.py --baseline qwen36-27b-vanilla
+  | tee results_tier_c/prefix_sweep_27b.txt
+pkill -f "vllm serve"; sleep 10
+python bench/analyze.py --baseline qwen36-27b-vanilla \
+  --results results_tier_c --plots plots_tier_c --include-label-regex '^qwen36-27b-'
 ```
 
 Success criterion: cold p50 TTFT < 1000 ms at 4096-token prompts, c=1 —
 and report the warm-cache number next to it (it will be dramatically lower).
-Copy `results/` + `plots/` off the pod (`runpodctl send`, `scp`, or just
-`git add results plots && git commit && git push`), THEN terminate the pod.
+Copy `results_tier_c/` + `plots_tier_c/` off the pod (`runpodctl send`, `scp`,
+or commit/push those directories), THEN terminate the pod.
 
 Known Tier-C failure modes:
 - CUDA graph / Mamba cache size error → add `--max-cudagraph-capture-size 256`
   (hybrid GDN state interacts with graph capture; known vLLM issue).
-- `--kv-cache-dtype fp8` or `-O3` errors on the hybrid arch → drop them one at
-  a time and RECORD the delta; that's ablation data, not failure.
+- `--kv-cache-dtype fp8` and `-O3` are quarantined in scripts/06's third
+  `aggressive` mode (Tier-A data showed -O3 earns nothing anyway) — run it
+  only after `optimized` has produced numbers, and RECORD the delta; that's
+  ablation data, not failure.
 - OOM → lower `--gpu-memory-utilization` to 0.88, confirm
   `--language-model-only` is set (skips the vision encoder).
 

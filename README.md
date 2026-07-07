@@ -3,6 +3,23 @@
 Task (Veysel): deploy locally, hit **TTFT < 1 s on the Qwen 27B**, show vanilla
 HF TGI + vLLM baselines first, then quantify how much you can speed it up.
 
+## Results so far (Tier A+B final · TGI + 27B runs pending — see [REPORT.md](REPORT.md))
+
+TTFT p50, 2048-token prompts, c=1, RTX 4000 Ada, Qwen3-4B:
+
+| naive HF | TGI vanilla | vLLM vanilla | vLLM FP8 cold | vLLM FP8 warm-cache |
+|---:|---:|---:|---:|---:|
+| 378 ms | *pending* | 263 ms | **227 ms** | **40 ms** |
+
+Fitted cost model (R²=0.9987, 3.4% holdout error): `TTFT = 51.5 ms + 108.8 µs × uncached_tokens`
+→ prefix caching is the dominant lever (7.1× at 95% cached); FP8 is the only
+server flag that materially pays (1.15–1.6× cold). Novel result: hybrid
+Gated-DeltaNet scales flatter than full attention — crossover is between 2k
+and 8k tokens, and the hybrid is 1.31× faster at 16k.
+
+![ttft vs prompt](plots/ttft_vs_prompt.png)
+![arch scaling](plots/arch_scaling.png)
+
 ## 0. Model landscape check (July 2026) — this reframes the task
 
 - **`Qwen/Qwen3.6-27B` exists** (dense, multimodal, released 2026-04-22), with an
@@ -65,7 +82,7 @@ Tier A (4B, classic arch — all engines):
 | `tgi-vanilla` | TGI docker, default flags |
 | `vllm-vanilla` | `vllm serve`, defaults, BF16 |
 | `ablation-*` | prefix-cache / cudagraphs / chunked-prefill toggled individually |
-| `vllm-optimized` | FP8 + tuned flags (scripts/03) |
+| `vllm-fp8-only` | promoted optimized config: FP8 checkpoint + minimal context cap (scripts/03; no `-O3`) |
 | `sglang` | optional cross-check (RadixAttention) |
 
 Tier B (novel, 4000 Ada): `Qwen3-4B-Instruct-2507` (full attention) vs
@@ -98,7 +115,7 @@ python bench/benchmark_ttft.py --label qwen35-4b-hybrid --tokenizer Qwen/Qwen3.5
     --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold
 
 # Tier C (on the 48GB pod):
-bash scripts/06_qwen36_27b.sh    # contains vanilla + optimized variants
+bash scripts/06_qwen36_27b.sh    # vanilla | optimized | aggressive variants
 ```
 
 ## 5. Deliverables

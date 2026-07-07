@@ -17,6 +17,7 @@ Usage:
 import argparse
 import glob
 import os
+import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -45,17 +46,23 @@ COLOR = {
     "ablation-eager":          "#e87ba4",  # magenta(slot 7)
     "arch-hybrid-gdn":         "#eb6834",  # orange (slot 8)
     "arch-full-attn":          "#2a78d6",  # same model as vllm-vanilla -> same hue
+    "qwen36-27b-vanilla":       "#2a78d6",
+    "qwen36-27b-optimized":     "#1baf7a",
+    "qwen36-27b-aggressive":    "#e34948",
 }
 PRETTY = {
     "vllm-vanilla": "vLLM vanilla (BF16)",
-    "vllm-optimized": "vLLM optimized (FP8+flags)",
+    "vllm-optimized": "legacy optimized label",
     "naive-hf": "naive HF transformers",
-    "vllm-fp8-only": "FP8 checkpoint only",
+    "vllm-fp8-only": "vLLM optimized (FP8-only)",
     "ablation-no-prefixcache": "no prefix cache",
     "ablation-cp-512": "chunked prefill 512",
     "ablation-eager": "eager (no CUDA graphs)",
     "arch-full-attn": "Qwen3-4B (full attention)",
     "arch-hybrid-gdn": "Qwen3.5-4B (hybrid GDN)",
+    "qwen36-27b-vanilla": "Qwen3.6-27B vanilla",
+    "qwen36-27b-optimized": "Qwen3.6-27B optimized",
+    "qwen36-27b-aggressive": "Qwen3.6-27B aggressive",
 }
 
 
@@ -116,8 +123,11 @@ def load(results_dir):
     files = sorted(glob.glob(os.path.join(results_dir, "*.csv")))
     if not files:
         raise SystemExit(f"no CSVs in {results_dir}/ — run benchmarks first")
-    df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
-    df = df.dropna(subset=["ttft_s"])
+    raw = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    missing = raw["ttft_s"].isna()
+    if missing.any():
+        print(f"WARNING: dropping {missing.sum()} rows with missing ttft_s", file=sys.stderr)
+    df = raw[~missing].copy()
     df["ttft_ms"] = df["ttft_s"] * 1000
     return df
 
@@ -149,11 +159,27 @@ def main():
     ap.add_argument("--results", default="results")
     ap.add_argument("--plots", default="plots")
     ap.add_argument("--baseline", default="vllm-vanilla")
+    ap.add_argument("--include-label-regex", default=None,
+                    help="only analyze labels matching this regex")
+    ap.add_argument("--exclude-label-regex", default=None,
+                    help="exclude labels matching this regex")
     args = ap.parse_args()
     os.makedirs(args.plots, exist_ok=True)
 
     df = load(args.results)
+    if args.include_label_regex:
+        df = df[df["label"].astype(str).str.contains(args.include_label_regex, regex=True, na=False)]
+    if args.exclude_label_regex:
+        df = df[~df["label"].astype(str).str.contains(args.exclude_label_regex, regex=True, na=False)]
+    if df.empty:
+        raise SystemExit("no rows left after label filters")
     summ = summarize(df)
+    have = set(summ.label.unique())
+    if args.baseline not in have:
+        raise SystemExit(
+            f"baseline {args.baseline!r} absent after label filters; "
+            f"available labels: {', '.join(sorted(have))}"
+        )
     with open(os.path.join(args.results, "summary.md"), "w") as f:
         f.write(summ.to_markdown(index=False))
     print(summ.to_string(index=False))
@@ -172,8 +198,14 @@ def main():
     have = set(summ.label.unique())
 
     # ---- plot 1: the ladder — cold TTFT vs prompt length (c=1) ----
-    ladder = [l for l in ["naive-hf", "vllm-vanilla", "vllm-fp8-only",
-                          "vllm-optimized"] if l in have]
+    if "qwen36-27b-vanilla" in have:
+        ladder = [l for l in ["qwen36-27b-vanilla", "qwen36-27b-optimized",
+                              "qwen36-27b-aggressive"] if l in have]
+        ladder_title = "Cold TTFT vs prompt length — Qwen3.6-27B-FP8, 48 GB Ada (c=1, p50)"
+    else:
+        ladder = [l for l in ["naive-hf", "vllm-vanilla", "vllm-fp8-only"]
+                  if l in have]
+        ladder_title = "Cold TTFT vs prompt length — Qwen3-4B, RTX 4000 Ada (c=1, p50)"
     sel = summ[(summ.concurrency == 1) & (summ.cache_mode == "cold")
                & (summ.label.isin(ladder))]
     if not sel.empty:
@@ -183,20 +215,24 @@ def main():
             if grp.empty:
                 continue
             line(ax, grp.prompt_tokens, grp.p50, lab,
-                 dashed=(lab == "vllm-fp8-only"))  # overlaps optimized by design
+                 dashed=(lab == "vllm-fp8-only"))
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
         tok_ticks(ax, sorted(sel.prompt_tokens.unique()))
         ms_ticks(ax, [30, 100, 300, 1000, 3000])
         legend(ax)
         finish(fig, ax,
-               "Cold TTFT vs prompt length — Qwen3-4B, RTX 4000 Ada (c=1, p50)",
+               ladder_title,
                "prompt length (tokens)", "TTFT (ms, log)",
                os.path.join(args.plots, "ttft_vs_prompt.png"))
 
     # ---- plot 2: p99 TTFT vs concurrency (largest common prompt, cold) ----
-    story = [l for l in ["vllm-vanilla", "vllm-optimized", "ablation-cp-512"]
-             if l in have]
+    if "qwen36-27b-vanilla" in have:
+        story = [l for l in ["qwen36-27b-vanilla", "qwen36-27b-optimized",
+                             "qwen36-27b-aggressive"] if l in have]
+    else:
+        story = [l for l in ["vllm-vanilla", "vllm-fp8-only", "ablation-cp-512"]
+                 if l in have]
     big = summ[(summ.cache_mode == "cold") & (summ.label.isin(story))]
     if not big.empty and big.concurrency.nunique() > 1:
         tokmax = big.prompt_tokens.max()
