@@ -37,6 +37,19 @@ class _StubTokenizer:
         return " ".join(f"tok{token_id}" for token_id in ids)
 
 
+class _FirstDecodeDropsToken(_StubTokenizer):
+    """Models a tokenizer whose first decode/encode round trip loses one ID."""
+
+    def __init__(self):
+        self.decode_calls = 0
+
+    def decode(self, ids):
+        self.decode_calls += 1
+        if self.decode_calls == 1:
+            ids = ids[:-1]
+        return super().decode(ids)
+
+
 class _StubAutoTokenizer:
     @staticmethod
     def from_pretrained(name):
@@ -105,6 +118,18 @@ class _OpenAIStubServer:
     @staticmethod
     async def _write_sse(response, payload):
         await response.write(b"data: " + json.dumps(payload).encode("utf-8") + b"\n\n")
+
+
+class PromptConstructionTests(unittest.TestCase):
+    def test_build_prompts_corrects_decode_round_trip_length_changes(self):
+        tokenizer = _FirstDecodeDropsToken()
+
+        prompts = benchmark_ttft.build_prompts(tokenizer, 128, 2, "warm")
+
+        self.assertEqual(
+            [len(tokenizer(prompt, add_special_tokens=False).input_ids) for prompt in prompts],
+            [128, 128],
+        )
 
 
 class TTFTStreamTests(unittest.IsolatedAsyncioTestCase):

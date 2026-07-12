@@ -1,148 +1,207 @@
-# EXECUTION.md — the exact runbook, start to finish
+# EXECUTION.md — Current Reproduction and Handoff Runbook
 
-Total budget: your existing RTX 4000 Ada pod (~$0.30-0.58/hr) for ~1 day of
-on-and-off work, plus one **RTX 6000 Ada 48GB** session (~$0.77/hr on-demand,
-3-4 hours, <$5). Everything below is literal commands in order.
+This file describes the repository as it exists after the RTX 6000 Ada session on 2026-07-12. It replaces the original speculative phase plan.
 
----
+## 1. Current state
 
-## Phase 0 — repo + pod hygiene (30 min, RTX 4000 Ada pod)
+Completed and preserved:
+
+- Full Qwen3.6-27B-FP8 vanilla matrix.
+- Full tuned matrix with RTX 6000 Ada FP8 GEMM configurations.
+- Full optimized prefix-cache matrix.
+- Full aggressive (`FP8 KV + -O3`) ablation matrix.
+- Focused 4096-token tuned-plus-optimized cell.
+- Focused 3072-token cold sub-second cell.
+- Tier C plots, summaries, raw server logs, environment record, and kernel configs.
+- Focused harness unit tests.
+
+Intentionally open:
+
+- TGI 4B comparison. No valid TGI CSV exists; use an official TGI-container pod.
+- Optional `cache-all` hybrid-Mamba experiment. The mode exists but is not included in the completed matrix.
+
+The 27B checkpoint was deleted from the current volume after measurements to release quota for the TGI attempt. A fresh session must download it again. All measurement CSVs and logs are already in the repository.
+
+## 2. Source-of-truth artifacts
+
+| artifact | meaning |
+|---|---|
+| `results_tier_c/qwen36-27b-vanilla.csv` | Full 27B baseline matrix |
+| `results_tier_c/qwen36-27b-tuned.csv` | Full matrix with installed RTX 6000 Ada FP8 GEMM configs |
+| `results_tier_c/qwen36-27b-optimized.csv` | Prefix-cache/chunk-budget matrix |
+| `results_tier_c/qwen36-27b-aggressive.csv` | FP8-KV plus `-O3` ablation |
+| `results_tier_c/qwen36-27b-tuned-optimized.csv` | Focused 4096 cold c=1 combination |
+| `results_tier_c/qwen36-27b-sub1.csv` | Focused 3072 cold c=1 headline |
+| `results_tier_c/fp8_configs/*.json` | Five device-specific vLLM block-FP8 configs |
+| `results_tier_c/server-*.log` | Exact vLLM startup/config/kernel evidence |
+| `results_tier_c/environment.txt` | Recorded pod environment |
+| `results_tier_c/summary.md` | Generated absolute statistics |
+| `results_tier_c/speedup.md` | Generated same-cell comparisons |
+| `plots_tier_c/*.png` | Final figures |
+
+Do not compare `results/` 4B rows against `results_tier_c/` as engine speedups: the GPU and model differ.
+
+## 3. Fresh Tier C pod
+
+Required hardware: one 48 GB Ada GPU (RTX 6000 Ada or L40S). The checked-in FP8 configuration filenames contain `NVIDIA_RTX_6000_Ada_Generation`; retune on an L40S or any differently named device.
 
 ```bash
-# On the pod, inside a Jupyter terminal:
-apt-get update && apt-get install -y tmux git
-tmux new -s ttft          # EVERYTHING from now on happens inside tmux.
-                          # (Jupyter terminals die with the tab; tmux survives.
-                          #  Detach: Ctrl-b d   Reattach: tmux attach -t ttft
-                          #  New pane: Ctrl-b %)
-
-git clone https://github.com/<you>/ttft-trial && cd ttft-trial
-bash scripts/00_setup.sh              # installs vllm>=0.19 + deps, downloads 4B models
+git clone <repo-url> ttft-trial
+cd ttft-trial
+bash scripts/00_setup.sh tier-c
 ```
 
-Checklist before continuing: `nvidia-smi` shows the 4000 Ada; `HF_HOME` is
-`/workspace/hf`; `python -c "import vllm; print(vllm.__version__)"` prints ≥0.19.
+Expected software from the setup script:
 
-## Phase 1 — naive HF floor (30 min)
+- vLLM 0.19.1
+- torch 2.10.0+cu128
+- NumPy `<2.3`
+- benchmark dependencies
+- `Qwen/Qwen3.6-27B-FP8` in `HF_HOME`
+
+Before a paid run:
 
 ```bash
-pip install fastapi uvicorn
-python baselines/naive_hf_server.py &        # pane 1
-# pane 2 (Ctrl-b %):
-python bench/benchmark_ttft.py --label naive-hf --api chat \
-  --prompt-tokens 128 512 1024 2048 --concurrency 1 --num-requests 12
-kill %1
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+python --version
+vllm --version
+python -m unittest tests.test_ttft_harness
 ```
-Expect seconds-scale TTFT at long prompts. If a run fails, read the stderr line
-the harness prints per request — it is almost always the fix.
 
-## Phase 2 — vLLM vanilla + ablations + optimized + prefix sweep (2-3 h, mostly unattended)
+## 4. Reproduce the completed matrix
+
+Generate and install configs for the active GPU:
 
 ```bash
-bash run_all.sh
+python bench/tune_qwen36_fp8.py --install
 ```
-This sequentially serves vanilla → three ablations → promoted optimized
-(`vllm-fp8-only`), runs the full matrix (5 prompt lengths × 3 concurrencies ×
-cold/warm × 24 target requests) against each, runs the prefix-cache sweep, then
-builds tables and plots.
-Watch the per-config lines it prints; sanity-check monotonicity (TTFT should
-grow with prompt length in cold mode and be ~flat in warm mode).
 
-If vanilla vLLM OOMs at startup (262k default context on 20GB): add
-`--max-model-len 16384` in scripts/02 and note it in the report as the single
-deviation from stock defaults.
+The bounded tuner targets the five Qwen3.6 block-FP8 matrix shapes at `M=4096`, writes JSON to `results_tier_c/fp8_configs/`, and copies the files into the active vLLM package. Run it with no vLLM server using the GPU.
 
-## Phase 3 — TGI vanilla (1 h, separate pod)
-
-RunPod → Deploy → same GPU type (RTX 4000 Ada) → **Custom container image**:
-`ghcr.io/huggingface/text-generation-inference:latest`, container args:
-`--model-id Qwen/Qwen3-4B-Instruct-2507 --max-input-tokens 8192 --max-total-tokens 8704`,
-expose HTTP port 80. Wait for "Connected" then from your main pod:
+Then:
 
 ```bash
-python bench/benchmark_ttft.py --label tgi-vanilla --api chat \
-  --url https://<tgi-pod-id>-80.proxy.runpod.net
+bash run_tier_c.sh vanilla tuned optimized aggressive
 ```
-Terminate the TGI pod immediately after. Note in the report: benchmarked over
-RunPod's proxy → add a same-host localhost run of vLLM vs proxied vLLM if you
-want to quantify the proxy's contribution (nice extra rigor: run one vllm config
-through the proxy too, so TGI vs vLLM is apples-to-apples).
-Why TGI gets the older Qwen3-4B: TGI does not support the Qwen3.5/3.6 hybrid
-Gated-DeltaNet architecture (its own README now recommends vLLM/SGLang going
-forward). All three engines are compared on the one model they all support.
 
-## Phase 4 — Tier B novel experiment: full attention vs hybrid GDN (1 h)
+`run_tier_c.sh`:
+
+1. records environment versions;
+2. launches one mode at a time;
+3. allows up to 30 minutes for 27B startup and CUDA-graph capture;
+4. verifies `/v1/models` readiness;
+5. runs the full exact-token matrix;
+6. terminates the actual `vllm serve` child, not only the shell wrapper;
+7. regenerates summaries and plots.
+
+The runner refuses unknown modes and keeps 27B output under `results_tier_c/` and `plots_tier_c/`.
+
+## 5. Reproduce only the headline boundary
+
+Start the tuned mode after installing the FP8 configs:
 
 ```bash
-# server pane — model 1 (classic transformer):
-vllm serve Qwen/Qwen3-4B-Instruct-2507 --max-model-len 16384
-# client pane:
-python bench/benchmark_ttft.py --label arch-full-attn \
+bash scripts/06_qwen36_27b.sh tuned
+```
+
+In another shell:
+
+```bash
+python bench/benchmark_ttft.py \
+  --label qwen36-27b-sub1 \
+  --url http://localhost:8000 \
+  --tokenizer Qwen/Qwen3.6-27B-FP8 \
+  --prompt-tokens 3072 \
+  --concurrency 1 \
+  --cache-modes cold \
+  --num-requests 24 \
+  --out results_tier_c
+```
+
+Expected recorded result: p50 839.7 ms, p90 850.6 ms, p99 856.5 ms, 24/24 successful. Small run-to-run differences are expected; preserve raw rows and do not replace the checked-in result unless the full environment is recorded.
+
+## 6. Focused 4096 tuned-plus-optimized cell
+
+Install the FP8 configs, start `optimized`, and label the client run explicitly:
+
+```bash
+bash scripts/06_qwen36_27b.sh optimized
+```
+
+```bash
+python bench/benchmark_ttft.py \
+  --label qwen36-27b-tuned-optimized \
+  --url http://localhost:8000 \
+  --tokenizer Qwen/Qwen3.6-27B-FP8 \
+  --prompt-tokens 4096 \
+  --concurrency 1 \
+  --cache-modes cold \
+  --num-requests 24 \
+  --out results_tier_c
+```
+
+Expected recorded result: p50 1063.2 ms, a 1.12× improvement over the 1193.8 ms vanilla cell.
+
+## 7. Prefix-cache caveat
+
+The normal warm workload in `benchmark_ttft.py` produced real, large reuse benefits. The progressive cache-fraction sweep did not.
+
+`results_tier_c/prefix_sweep_27b-optimized.txt` has a negative slope and is not a valid cost model. vLLM's hybrid Mamba cache was in experimental `align` mode. The revised sweep code rejects non-physical fits; do not weaken that guard to recreate a regression line.
+
+Optional continuation:
+
+```bash
+bash run_tier_c.sh cache-all
+```
+
+This tests `--mamba-cache-mode all`. Treat it as a new experiment: keep its CSV/log separate and compare cache-hit telemetry before interpreting TTFT.
+
+## 8. Regenerate analysis without a GPU
+
+```bash
+python bench/analyze.py \
+  --baseline qwen36-27b-vanilla \
+  --results results_tier_c \
+  --plots plots_tier_c \
+  --include-label-regex '^qwen36-27b-'
+```
+
+This rewrites `results_tier_c/summary.md`, `results_tier_c/speedup.md`, and the Tier C plots. The summary contains focused one-cell labels in addition to the full matrices; that is intentional.
+
+## 9. TGI continuation — use a separate official-container pod
+
+TGI cannot serve Qwen3.6-27B's hybrid architecture. The comparison model is `Qwen/Qwen3-4B-Instruct-2507`.
+
+Recommended pod:
+
+- container image: `ghcr.io/huggingface/text-generation-inference:latest`
+- one Ada GPU
+- expose the TGI HTTP port
+- model: `Qwen/Qwen3-4B-Instruct-2507`
+- `--max-input-tokens 8192 --max-total-tokens 8704`
+
+From the client checkout:
+
+```bash
+python bench/benchmark_ttft.py \
+  --label tgi-vanilla \
+  --url http://<tgi-host>:<port> \
+  --api chat \
   --tokenizer Qwen/Qwen3-4B-Instruct-2507 \
-  --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold
-# kill server; then model 2 (hybrid Gated DeltaNet), IDENTICAL flags:
-vllm serve Qwen/Qwen3.5-4B --max-model-len 16384
-python bench/benchmark_ttft.py --label arch-hybrid-gdn \
-  --tokenizer Qwen/Qwen3.5-4B \
-  --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold
-python bench/analyze.py
+  --out results
 ```
-The plot to make: cold TTFT vs prompt length, log-log, both curves. The story:
-how prefill scales for linear-attention hybrids vs classic attention. Caveat to
-write down: the two models differ in more than attention (Qwen3.5-4B is also
-multimodal-pretrained), so frame it as "architecture generation" comparison.
 
-## Phase 5 — Tier C: the actual task, Qwen3.6-27B (3-4 h, 48GB pod)
+Then regenerate Tier A analysis with `python bench/analyze.py --baseline vllm-vanilla`.
 
-Rent **RTX 6000 Ada 48GB** (or L40S). Ada generation = native FP8; do NOT take
-an A100 (Ampere, no FP8 tensor cores). Then:
+Do not resume the abandoned native-source build on this pod. It loaded the model but its Rust router's embedded Python tokenizer worker failed (`_ctypes`, `charset_normalizer`, and `huggingface_hub` initialization), every generation POST disconnected, and the harness correctly wrote no CSV. `DEBUGLOG.md` records the decisive evidence.
+
+## 10. Shutdown checklist
+
+Before terminating a paid pod:
 
 ```bash
-tmux new -s ttft
-git clone https://github.com/<you>/ttft-trial && cd ttft-trial
-bash scripts/00_setup.sh tier-c              # downloads Qwen3.6-27B-FP8 (~27GB)
-
-mkdir -p results_tier_c plots_tier_c
-
-bash scripts/06_qwen36_27b.sh vanilla &      # pane 1
-python bench/benchmark_ttft.py --label qwen36-27b-vanilla \
-  --tokenizer Qwen/Qwen3.6-27B-FP8 --out results_tier_c
-pkill -f "vllm serve"; sleep 10
-
-bash scripts/06_qwen36_27b.sh optimized &
-python bench/benchmark_ttft.py --label qwen36-27b-optimized \
-  --tokenizer Qwen/Qwen3.6-27B-FP8 --out results_tier_c
-python bench/prefix_cache_sweep.py --tokenizer Qwen/Qwen3.6-27B-FP8 \
-  | tee results_tier_c/prefix_sweep_27b.txt
-pkill -f "vllm serve"; sleep 10
-python bench/analyze.py --baseline qwen36-27b-vanilla \
-  --results results_tier_c --plots plots_tier_c --include-label-regex '^qwen36-27b-'
+nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader
+python -m unittest tests.test_ttft_harness
 ```
 
-Success criterion: cold p50 TTFT < 1000 ms at 4096-token prompts, c=1 —
-and report the warm-cache number next to it (it will be dramatically lower).
-Copy `results_tier_c/` + `plots_tier_c/` off the pod (`runpodctl send`, `scp`,
-or commit/push those directories), THEN terminate the pod.
-
-Known Tier-C failure modes:
-- CUDA graph / Mamba cache size error → add `--max-cudagraph-capture-size 256`
-  (hybrid GDN state interacts with graph capture; known vLLM issue).
-- `--kv-cache-dtype fp8` and `-O3` are quarantined in scripts/06's third
-  `aggressive` mode (Tier-A data showed -O3 earns nothing anyway) — run it
-  only after `optimized` has produced numbers, and RECORD the delta; that's
-  ablation data, not failure.
-- OOM → lower `--gpu-memory-utilization` to 0.88, confirm
-  `--language-model-only` is set (skips the vision encoder).
-
-## Phase 6 — write-up + repo polish (2 h, no GPU)
-
-Fill `report_template.md` with real numbers → rename to `REPORT.md`, put the
-headline table + 2 plots at the top of the repo README, commit raw CSVs.
-Final deliverable to Veysel = the GitHub link. The repo should let him
-reproduce any number in the report with one script + one command.
-
-## Order of what to cut if short on time
-
-Keep (non-negotiable): Phases 2, 3, 5, 6 — the task as assigned.
-Cut first: SGLang cross-check → naive-HF floor → Tier B architecture study.
-(But Tier B is your strongest "novel" card; cut it last among the extras.)
+Expected current compute-process output after cleanup: empty. Confirm the repository contains `results_tier_c/`, `plots_tier_c/`, the modified benchmark/scripts/tests, and this documentation before pushing.

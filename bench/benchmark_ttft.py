@@ -46,6 +46,26 @@ FILLER = (
 )
 
 
+def decode_exact_prompt(tokenizer, token_ids, n_tokens, padding_ids):
+    """Decode token IDs to text that re-tokenizes to exactly ``n_tokens``."""
+    text = tokenizer.decode(token_ids)
+    for _ in range(8):
+        actual_ids = tokenizer(text, add_special_tokens=False).input_ids
+        if len(actual_ids) == n_tokens:
+            return text
+        if len(actual_ids) > n_tokens:
+            corrected_ids = actual_ids[:n_tokens]
+        else:
+            missing = n_tokens - len(actual_ids)
+            repeats = (missing + len(padding_ids) - 1) // len(padding_ids)
+            corrected_ids = actual_ids + (padding_ids * repeats)[:missing]
+        text = tokenizer.decode(corrected_ids)
+    actual = len(tokenizer(text, add_special_tokens=False).input_ids)
+    raise ValueError(
+        f"could not construct exact-length prompt: requested {n_tokens}, got {actual}"
+    )
+
+
 def build_prompts(tokenizer, n_tokens: int, count: int, cache_mode: str):
     """Return `count` prompt strings, each exactly `n_tokens` tokens long."""
     nonce_tokens = 8  # tokens reserved for the unique nonce
@@ -65,7 +85,7 @@ def build_prompts(tokenizer, n_tokens: int, count: int, cache_mode: str):
             ids = nonce_ids + body          # unique START -> guaranteed cache miss
         else:  # warm
             ids = body + nonce_ids          # shared prefix, unique TAIL
-        prompts.append(tokenizer.decode(ids))
+        prompts.append(decode_exact_prompt(tokenizer, ids, n_tokens, base_ids))
     return prompts
 
 

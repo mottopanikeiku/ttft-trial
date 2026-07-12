@@ -36,7 +36,7 @@ import time
 import aiohttp
 import numpy as np
 
-from benchmark_ttft import FILLER, one_request, pct
+from benchmark_ttft import FILLER, decode_exact_prompt, one_request, pct
 
 
 def filler_ids(tokenizer, min_tokens):
@@ -52,7 +52,9 @@ def make_prompt(tokenizer, shared_ids, uncached_tokens):
     nonce_ids = tokenizer(f"[{nonce}] ", add_special_tokens=False).input_ids[:8]
     body = filler_ids(tokenizer, uncached_tokens)
     tail = nonce_ids + body[: max(0, uncached_tokens - len(nonce_ids))]
-    return tokenizer.decode(shared_ids + tail)
+    return decode_exact_prompt(
+        tokenizer, shared_ids + tail, len(shared_ids) + uncached_tokens, body
+    )
 
 
 async def measure(session, url, model, tokenizer, total, frac, n, max_tokens,
@@ -130,13 +132,16 @@ async def main():
         A = np.vstack([np.ones(len(xs)), np.array(xs)]).T
         (a, b), *_ = np.linalg.lstsq(A, np.array(ys), rcond=None)
         r2 = 1 - np.sum((A @ [a, b] - ys) ** 2) / np.sum((ys - np.mean(ys)) ** 2)
-        if not (np.isfinite(a) and np.isfinite(b) and np.isfinite(r2) and b > 0):
+        if not (np.isfinite(a) and np.isfinite(b) and np.isfinite(r2)):
             raise RuntimeError(f"invalid fit: a={a}, b={b}, r2={r2}")
 
         print("\n=== fitted model:  TTFT = a + b * uncached_tokens ===")
         print(f"  a (fixed overhead)          = {a*1000:.1f} ms")
         print(f"  b                           = {b*1e6:.2f} us/token")
-        print(f"  1/b (eff. prefill thruput)  = {1/b:,.0f} tokens/s")
+        if b > 0:
+            print(f"  1/b (eff. prefill thruput)  = {1/b:,.0f} tokens/s")
+        else:
+            print("  1/b (eff. prefill thruput)  = not meaningful (no positive scaling)")
         print(f"  R^2                         = {r2:.4f}")
 
         # ---- holdout validation ----

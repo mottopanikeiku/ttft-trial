@@ -197,60 +197,142 @@ def main():
 
     have = set(summ.label.unique())
 
-    # ---- plot 1: the ladder — cold TTFT vs prompt length (c=1) ----
-    if "qwen36-27b-vanilla" in have:
-        ladder = [l for l in ["qwen36-27b-vanilla", "qwen36-27b-optimized",
-                              "qwen36-27b-aggressive"] if l in have]
-        ladder_title = "Cold TTFT vs prompt length — Qwen3.6-27B-FP8, 48 GB Ada (c=1, p50)"
-    else:
-        ladder = [l for l in ["naive-hf", "vllm-vanilla", "vllm-fp8-only"]
-                  if l in have]
-        ladder_title = "Cold TTFT vs prompt length — Qwen3-4B, RTX 4000 Ada (c=1, p50)"
-    sel = summ[(summ.concurrency == 1) & (summ.cache_mode == "cold")
-               & (summ.label.isin(ladder))]
-    if not sel.empty:
+    # ---- plot 1: the dominant mechanism at c=1 ----
+    if "qwen36-27b-vanilla" in have and "qwen36-27b-optimized" in have:
         fig, ax = new_fig()
-        for lab in ladder:  # fixed order, fixed colors
-            grp = sel[sel.label == lab].sort_values("prompt_tokens")
-            if grp.empty:
-                continue
-            line(ax, grp.prompt_tokens, grp.p50, lab,
-                 dashed=(lab == "vllm-fp8-only"))
+        series = [
+            ("qwen36-27b-vanilla", "cold", "#2a78d6", "vanilla — cold", "-"),
+            ("qwen36-27b-optimized", "warm", "#1baf7a", "optimized — prefix reused", "-"),
+        ]
+        token_values = set()
+        for lab, mode, color, display_name, linestyle in series:
+            grp = summ[
+                (summ.concurrency == 1)
+                & (summ.cache_mode == mode)
+                & (summ.label == lab)
+            ].sort_values("prompt_tokens")
+            token_values.update(grp.prompt_tokens)
+            ax.plot(
+                grp.prompt_tokens,
+                grp.p50,
+                color=color,
+                linewidth=2,
+                linestyle=linestyle,
+                marker="o",
+                markersize=5.5,
+                markeredgecolor=SURFACE,
+                markeredgewidth=1.2,
+                label=display_name,
+                zorder=3,
+            )
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
-        tok_ticks(ax, sorted(sel.prompt_tokens.unique()))
+        tok_ticks(ax, sorted(token_values))
         ms_ticks(ax, [30, 100, 300, 1000, 3000])
         legend(ax)
-        finish(fig, ax,
-               ladder_title,
-               "prompt length (tokens)", "TTFT (ms, log)",
-               os.path.join(args.plots, "ttft_vs_prompt.png"))
-
-    # ---- plot 2: p99 TTFT vs concurrency (largest common prompt, cold) ----
-    if "qwen36-27b-vanilla" in have:
-        story = [l for l in ["qwen36-27b-vanilla", "qwen36-27b-optimized",
-                             "qwen36-27b-aggressive"] if l in have]
+        finish(
+            fig,
+            ax,
+            "Prefix reuse, not extra server flags, moves 27B TTFT",
+            "prompt length (tokens)",
+            "TTFT p50 (ms, log)",
+            os.path.join(args.plots, "ttft_vs_prompt.png"),
+        )
     else:
-        story = [l for l in ["vllm-vanilla", "vllm-fp8-only", "ablation-cp-512"]
-                 if l in have]
-    big = summ[(summ.cache_mode == "cold") & (summ.label.isin(story))]
-    if not big.empty and big.concurrency.nunique() > 1:
-        tokmax = big.prompt_tokens.max()
-        big = big[big.prompt_tokens == tokmax]
-        fig, ax = new_fig()
-        for lab in story:
-            grp = big[big.label == lab].sort_values("concurrency")
-            if grp.empty:
-                continue
-            line(ax, grp.concurrency, grp.p99, lab)
-        ax.set_yscale("log")
-        ax.set_xticks(sorted(big.concurrency.unique()))
-        ms_ticks(ax, [300, 1000, 3000, 10000])
-        legend(ax)
-        finish(fig, ax,
-               f"p99 TTFT under load — {int(tokmax)}-token cold prompts",
-               "concurrent requests", "TTFT p99 (ms, log)",
-               os.path.join(args.plots, "ttft_concurrency.png"))
+        ladder = [
+            lab
+            for lab in ["naive-hf", "vllm-vanilla", "vllm-fp8-only"]
+            if lab in have
+        ]
+        sel = summ[
+            (summ.concurrency == 1)
+            & (summ.cache_mode == "cold")
+            & (summ.label.isin(ladder))
+        ]
+        if not sel.empty:
+            fig, ax = new_fig()
+            for lab in ladder:
+                grp = sel[sel.label == lab].sort_values("prompt_tokens")
+                if not grp.empty:
+                    line(ax, grp.prompt_tokens, grp.p50, lab, dashed=(lab == "vllm-fp8-only"))
+            ax.set_xscale("log", base=2)
+            ax.set_yscale("log")
+            tok_ticks(ax, sorted(sel.prompt_tokens.unique()))
+            ms_ticks(ax, [30, 100, 300, 1000, 3000])
+            legend(ax)
+            finish(
+                fig,
+                ax,
+                "Cold TTFT vs prompt length — Qwen3-4B, RTX 4000 Ada (c=1, p50)",
+                "prompt length (tokens)",
+                "TTFT (ms, log)",
+                os.path.join(args.plots, "ttft_vs_prompt.png"),
+            )
+
+    # ---- plot 2: cache state controls p99 under load ----
+    if "qwen36-27b-optimized" in have:
+        big = summ[
+            (summ.label == "qwen36-27b-optimized")
+            & (summ.prompt_tokens == 4096)
+        ]
+        if not big.empty and big.concurrency.nunique() > 1:
+            fig, ax = new_fig()
+            for mode, color, display_name in [
+                ("cold", "#e34948", "cold prefix"),
+                ("warm", "#1baf7a", "reused prefix"),
+            ]:
+                grp = big[big.cache_mode == mode].sort_values("concurrency")
+                ax.plot(
+                    grp.concurrency,
+                    grp.p99,
+                    color=color,
+                    linewidth=2,
+                    marker="o",
+                    markersize=5.5,
+                    markeredgecolor=SURFACE,
+                    markeredgewidth=1.2,
+                    label=display_name,
+                    zorder=3,
+                )
+            ax.set_yscale("log")
+            ax.set_xticks(sorted(big.concurrency.unique()))
+            ms_ticks(ax, [100, 300, 1000, 3000, 10000, 30000])
+            legend(ax)
+            finish(
+                fig,
+                ax,
+                "Prefix reuse controls p99 — Qwen3.6-27B, 4096-token prompts",
+                "concurrent requests",
+                "TTFT p99 (ms, log)",
+                os.path.join(args.plots, "ttft_concurrency.png"),
+            )
+    else:
+        story = [
+            lab
+            for lab in ["vllm-vanilla", "vllm-fp8-only", "ablation-cp-512"]
+            if lab in have
+        ]
+        big = summ[(summ.cache_mode == "cold") & (summ.label.isin(story))]
+        if not big.empty and big.concurrency.nunique() > 1:
+            tokmax = big.prompt_tokens.max()
+            big = big[big.prompt_tokens == tokmax]
+            fig, ax = new_fig()
+            for lab in story:
+                grp = big[big.label == lab].sort_values("concurrency")
+                if not grp.empty:
+                    line(ax, grp.concurrency, grp.p99, lab)
+            ax.set_yscale("log")
+            ax.set_xticks(sorted(big.concurrency.unique()))
+            ms_ticks(ax, [300, 1000, 3000, 10000])
+            legend(ax)
+            finish(
+                fig,
+                ax,
+                f"p99 TTFT under load — {int(tokmax)}-token cold prompts",
+                "concurrent requests",
+                "TTFT p99 (ms, log)",
+                os.path.join(args.plots, "ttft_concurrency.png"),
+            )
 
     # ---- plot 3: headline speedup bars (c=1, 2048 tok if present) ----
     tgt = 2048 if (sp.prompt_tokens == 2048).any() else sp.prompt_tokens.max()

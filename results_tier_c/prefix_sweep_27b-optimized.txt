@@ -1,0 +1,17 @@
+total prompt = 4096 tokens, model = Qwen/Qwen3.6-27B-FP8
+
+ cached % | uncached tok |   p50 TTFT |       p90
+       0% |         4096 |   1034.4ms |  1053.0ms
+      25% |         3072 |   1069.8ms |  1075.0ms
+      50% |         2048 |   1084.5ms |  1090.5ms
+      75% |         1024 |   1095.4ms |  1102.1ms
+      95% |          205 |   1100.4ms |  1106.9ms
+
+=== fitted model:  TTFT = a + b * uncached_tokens ===
+  a (fixed overhead)          = 1110.0 ms
+  b                           = -15.77 us/token
+  1/b (eff. prefill thruput)  = not meaningful (no positive scaling)
+  R^2                         = 0.8716
+
+=== holdout @ cached=60% (uncached=1639 tok) ===
+  predicted p50 = 1084.1 ms | measured p50 = 1102.7 ms | error = 1.7%

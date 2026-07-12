@@ -1,135 +1,111 @@
-# ttft-trial — Minimizing Time-To-First-Token for Local LLM Deployment
+# ttft-trial — Qwen3.6-27B TTFT on one 48 GB Ada GPU
 
-Task (Veysel): deploy locally, hit **TTFT < 1 s on the Qwen 27B**, show vanilla
-HF TGI + vLLM baselines first, then quantify how much you can speed it up.
+Measured answer to the assignment: run a Qwen 27B model locally, minimize client-observed time to first token (TTFT), and cross **TTFT < 1 s**.
 
-## Results so far (Tier A+B final · TGI + 27B runs pending — see [REPORT.md](REPORT.md))
+## Result
 
-TTFT p50, 2048-token prompts, c=1, RTX 4000 Ada, Qwen3-4B:
+**Target met.** `Qwen/Qwen3.6-27B-FP8` on one NVIDIA RTX 6000 Ada:
 
-| naive HF | TGI vanilla | vLLM vanilla | vLLM FP8 cold | vLLM FP8 warm-cache |
-|---:|---:|---:|---:|---:|
-| 378 ms | *pending* | 263 ms | **227 ms** | **40 ms** |
+| workload | mode | p50 | p90 | p99 | samples |
+|---|---|---:|---:|---:|---:|
+| 3072-token cold prompt, c=1 | tuned | **839.7 ms** | 850.6 ms | 856.5 ms | 24 |
+| 4096-token cold prompt, c=1 | vanilla | 1193.8 ms | 1197.4 ms | 1198.1 ms | 24 |
+| 4096-token cold prompt, c=1 | tuned + optimized | **1063.2 ms** | 1080.6 ms | 1085.3 ms | 24 |
+| 4096-token warm prompt, c=1 | optimized prefix cache | **117.1 ms** | 118.8 ms | 119.7 ms | 23 |
 
-Fitted cost model (R²=0.9987, 3.4% holdout error): `TTFT = 51.5 ms + 108.8 µs × uncached_tokens`
-→ prefix caching is the dominant lever (7.1× at 95% cached); FP8 is the only
-server flag that materially pays (1.15–1.6× cold). Novel result: hybrid
-Gated-DeltaNet scales flatter than full attention — crossover is between 2k
-and 8k tokens, and the hybrid is 1.31× faster at 16k.
+The claim is deliberately scoped: the measured sub-second boundary is 3072 cold tokens at concurrency 1. The best measured 4096-token cold p50 is 1.063 s, not sub-second. At 4096 tokens, a reusable prefix changes the result from 1.193 s to 117 ms, a **10.19×** p50 speedup.
 
-![ttft vs prompt](plots/ttft_vs_prompt.png)
-![arch scaling](plots/arch_scaling.png)
+![Tier C TTFT versus prompt length](plots_tier_c/ttft_vs_prompt.png)
 
-## 0. Model landscape check (July 2026) — this reframes the task
+![Tier C concurrency behavior](plots_tier_c/ttft_concurrency.png)
 
-- **`Qwen/Qwen3.6-27B` exists** (dense, multimodal, released 2026-04-22), with an
-  official **`Qwen/Qwen3.6-27B-FP8`** checkpoint (~27 GB weights) that runs
-  **single-GPU on a 48 GB card** with vLLM ≥ 0.19. So the original "qwen 27B,
-  TTFT < 1 s" task is literally doable — no need to permanently downgrade to 4B.
-- Qwen3.5/3.6 use a **hybrid architecture: Gated DeltaNet linear attention +
-  full attention (3:1)**. Consequences for this project:
-  - Prefill over linear-attention layers is ~O(L) with small constants →
-    TTFT scaling vs prompt length behaves differently than classic transformers.
-    Measuring this IS the novel experiment (Tier B below).
-  - **TGI does not support this architecture.** TGI's own README now points
-    users to vLLM/SGLang going forward — it's effectively in maintenance mode.
-    So the 3-engine "vanilla" comparison must use a classic-architecture model
-    that all three engines support: **`Qwen/Qwen3-4B-Instruct-2507`** (+ its
-    official FP8 checkpoint). State this explicitly in the report; it's a
-    legitimate finding, not a cop-out.
-  - Qwen3.6 defaults to *thinking mode* and its chat template opens a `<think>`
-    block. Our harness measures TTFT via the raw `/v1/completions` endpoint,
-    which bypasses the chat template entirely → clean, comparable numbers.
-  - MTP (multi-token prediction) speculative decoding is built in — it speeds
-    up *decode*, not TTFT. Say so; knowing what doesn't help is signal.
+Raw Tier C rows: [`results_tier_c/`](results_tier_c/). Full interpretation: [`REPORT.md`](REPORT.md). Exact continuation runbook: [`EXECUTION.md`](EXECUTION.md).
 
-## 1. Hardware plan
+## Hardware and software
 
-| Tier | GPU | Cost | What runs there |
-|---|---|---|---|
-| A + B | **RTX 4000 Ada, 20 GB** (already rented) | cheap, keep it | harness dev, 3-engine vanilla comparison, optimization ladder, prefix sweep, architecture study (4B models) |
-| C | **L40S or RTX 6000 Ada, 48 GB** (rent for ~3-4 h) | ~$3-5 total | the actual task: Qwen3.6-27B-FP8, TTFT < 1 s, vanilla vs optimized |
+Tier C was measured on:
 
-Why these cards: all are Ada (SM 8.9) → native **FP8 tensor cores** +
-FlashAttention-2. Avoid A100 for Tier C (Ampere = no native FP8 compute).
-A 20 GB card cannot host the 27B: even the NVFP4 checkpoint is ~22 GB weights.
-Develop cheap on the 4000 Ada, then do one short, well-rehearsed session on the
-48 GB card.
+- NVIDIA RTX 6000 Ada Generation, 49,140 MiB, SM 8.9
+- driver 570.195.03; CUDA toolkit/runtime 12.8 for this pod
+- Python 3.12.3
+- vLLM 0.19.1; torch 2.10.0+cu128
+- `Qwen/Qwen3.6-27B-FP8`, text-only serving
 
-## 2. TTFT theory (know this cold)
+Tier A/B data in [`results/`](results/) came from the earlier RTX 4000 Ada 20 GB session and must not be mixed into same-hardware engine speedups.
 
-```
-TTFT = HTTP/SSE overhead + tokenization + scheduler queueing
-     + PREFILL (dominant) + first sampled token + detokenize/flush
-```
-- Prefill is **compute-bound** → FP8 helps TTFT on Ada; weight-only INT4
-  (AWQ) mainly helps decode (bandwidth-bound) and can even hurt prefill.
-- TTFT grows ~linearly with prompt length on classic transformers → always
-  report TTFT *vs prompt length*, never one number. Hybrid GDN models should
-  show a flatter long-context curve — measure it (Tier B).
-- **Prefix caching is the biggest lever**: cached prefix tokens skip prefill.
-  Benchmark both cold (unique prefix → guaranteed miss) and warm (shared
-  prefix) — most people accidentally benchmark only cache hits.
-- Under concurrency, queueing/head-of-line blocking dominates p99 TTFT →
-  chunked prefill budget (`--max-num-batched-tokens`) is the tradeoff knob.
+## What was measured
 
-## 3. Configuration ladder
+Client-observed TTFT is the interval from sending the HTTP request to receiving the first streamed token from `/v1/completions`.
 
-Tier A (4B, classic arch — all engines):
-| label | stack |
-|---|---|
-| `naive-hf` | plain transformers + FastAPI (reference floor) |
-| `tgi-vanilla` | TGI docker, default flags |
-| `vllm-vanilla` | `vllm serve`, defaults, BF16 |
-| `ablation-*` | prefix-cache / cudagraphs / chunked-prefill toggled individually |
-| `vllm-fp8-only` | promoted optimized config: FP8 checkpoint + minimal context cap (scripts/03; no `-O3`) |
-| `sglang` | optional cross-check (RadixAttention) |
+- Exact tokenizer-length prompts: 128, 512, 1024, 2048, and 4096 tokens.
+- Concurrency: 1, 4, and 16.
+- Cache modes:
+  - `cold`: a unique nonce is placed at the beginning, forcing a prefix-cache miss;
+  - `warm`: requests share the long prefix and place a unique nonce at the end.
+- Temperature 0; 16 generated tokens; warmups discarded; normally 24 measured requests per cell.
+- The harness rejects a cell below the configured success fraction instead of writing partial data silently.
 
-Tier B (novel, 4000 Ada): `Qwen3-4B-Instruct-2507` (full attention) vs
-`Qwen/Qwen3.5-4B` (hybrid GDN) — TTFT vs prompt length 128→16k, same vLLM,
-same flags. Plot the scaling curves on log-log; fit slopes.
+The one-cell 3072-token boundary run is in `results_tier_c/qwen36-27b-sub1.csv`. The full vanilla, tuned, optimized, and aggressive matrices are separate CSVs in the same directory.
 
-Tier C (48 GB card): `Qwen3.6-27B-FP8` vanilla vs optimized (scripts/06) —
-the < 1 s headline, plus the prefix-cache sweep at 27B scale.
+## Tier C mode definitions
 
-## 4. Runbook (RunPod workflow)
+[`scripts/06_qwen36_27b.sh`](scripts/06_qwen36_27b.sh) contains the authoritative flags.
 
-**Terminal discipline:** you're on Jupyter Lab — its terminals die when the
-tab/kernel does, killing your vLLM server mid-benchmark. Use **tmux** (or SSH
-in and use tmux) — `apt install tmux`; one pane for the server, one for the
-client. Keep `HF_HOME=/workspace/hf` so weights live on the persistent volume,
-not the container disk.
+| mode | purpose | measured conclusion |
+|---|---|---|
+| `vanilla` | Minimum survival flags: text-only model, 8192 context, CUDA-graph capture capped at 256 | Stable baseline; 4096 cold p50 1193.8 ms |
+| `tuned` | Vanilla scheduling plus five RTX 6000 Ada block-FP8 GEMM configs generated by `bench/tune_qwen36_fp8.py` | Mostly neutral over the full matrix; establishes 3072 cold p50 839.7 ms |
+| `optimized` | 8192-token chunk budget, 0.92 GPU utilization, prefix caching | Cold c=1 is slightly worse alone; warm 4096 c=1 is 10.19× faster |
+| `aggressive` | Optimized plus FP8 KV cache and `-O3` | Not a general win; multiple cold/concurrent cells regress |
+| `cache-all` | Optional hybrid-Mamba cache experiment | Implemented but not part of the completed measured matrix |
+
+Precomputed device-specific FP8 configurations are preserved in `results_tier_c/fp8_configs/`. They target the five Qwen3.6 matrix shapes at `M=4096`; they are not portable performance claims for other GPUs.
+
+## Main findings
+
+1. **Sub-second TTFT is real at 3072 cold tokens.** The p99 is also below 1 s (856.5 ms), so the headline is not a median-only artifact.
+2. **4096 cold tokens remain just above the target.** Vanilla is 1193.8 ms; tuned plus optimized reaches 1063.2 ms (1.12×).
+3. **Prefix caching dominates when the prefix is actually reusable.** Optimized 4096-token warm c=1 is 117.1 ms versus vanilla cold 1193.8 ms.
+4. **Concurrency changes the problem from kernel latency to queueing.** Vanilla 4096 cold p50 rises from 1.194 s at c=1 to 2.421 s at c=4 and 10.357 s at c=16; p99 reaches 19.963 s at c=16.
+5. **The progressive 27B prefix sweep did not produce monotonic cache hits.** Its fitted slope is negative and not physically meaningful. Preserve the raw file as a failed experiment; do not quote its regression as a performance model. The exact shared-prefix workload above is the valid cache result.
+6. **Tier A/B remain useful supporting evidence.** On Qwen3-4B, FP8 was the only server-level change with a broad cold-path win; the hybrid Qwen3.5-4B architecture scaled flatter than full attention and was 1.31× faster at 16k tokens.
+
+## TGI status
+
+There is **no valid TGI TTFT number in this repository**. Do not fill one in from failed attempts.
+
+- TGI does not support the hybrid Qwen3.6-27B architecture, so it cannot be the 27B engine baseline.
+- A fair TGI comparison must use the classic `Qwen/Qwen3-4B-Instruct-2507` model.
+- This pod had no Docker daemon. A source-built TGI 3.3.7 stack loaded the 4B checkpoint, but its embedded Python tokenizer worker failed and every POST connection closed; no CSV was accepted.
+- The reliable continuation is a fresh RunPod using the official TGI container, then run the harness with `--api chat`. See `scripts/01_tgi.sh` and `EXECUTION.md`.
+
+## Reproduce
+
+Fresh RTX 6000 Ada/L40S pod:
 
 ```bash
-git clone <your-github>/ttft-trial && cd ttft-trial
-bash scripts/00_setup.sh
-
-# Tier A, end-to-end vLLM half (vanilla -> ablations -> optimized -> sweep -> plots):
-bash run_all.sh
-# TGI runs as its own RunPod pod using the TGI container image (scripts/01_tgi.sh
-# header explains); benchmark it remotely, drop the CSV into results/, re-run analyze.
-
-# Tier B (architecture study), same server flags for both models:
-vllm serve Qwen/Qwen3.5-4B --max-model-len 16384 &
-python bench/benchmark_ttft.py --label qwen35-4b-hybrid --tokenizer Qwen/Qwen3.5-4B \
-    --prompt-tokens 128 512 2048 8192 16384 --concurrency 1 --cache-modes cold
-
-# Tier C (on the 48GB pod):
-bash scripts/06_qwen36_27b.sh    # vanilla | optimized | aggressive variants
+bash scripts/00_setup.sh tier-c
+python bench/tune_qwen36_fp8.py --install
+bash run_tier_c.sh vanilla tuned optimized aggressive
 ```
 
-## 5. Deliverables
+For only the assigned cold headline, run `vanilla`, install/reuse the FP8 configs, then run `tuned`. `run_tier_c.sh` bounds startup, kills the real vLLM child process, records server logs/environment data, keeps 27B data separate, and regenerates Tier C plots.
 
-`results/summary.md`, `results/speedup.md`, three plots, prefix-sweep fitted
-model (`TTFT = a + b·uncached_tokens`, R², holdout error), ablation table,
-architecture-scaling plot, and the one-page report (report_template.md).
-Push everything to the `ttft-trial` GitHub repo with the raw CSVs — reviewers
-trust raw data.
+Focused harness tests:
 
-## 6. Sanity expectations (verify, don't trust)
+```bash
+python -m unittest tests.test_ttft_harness
+```
 
-4B on 4000 Ada, cold, c=1: naive-hf seconds; vanilla vLLM roughly tens-of-ms
-at 128 tok to high-hundreds-of-ms at 4k; warm-cache tens of ms regardless of
-length. 27B-FP8 on 48 GB: prefill throughput should put 4k-token cold TTFT
-comfortably under 1 s; if not, check chunked-prefill budget and that FP8
-kernels actually engaged (watch startup logs).
+## Repository map
+
+- `bench/benchmark_ttft.py` — exact-token asynchronous TTFT harness
+- `bench/prefix_cache_sweep.py` — cache sweep; rejects non-physical fits
+- `bench/tune_qwen36_fp8.py` — bounded RTX 6000 Ada block-FP8 kernel tuner
+- `bench/analyze.py` — summary, speedup tables, and plots
+- `scripts/06_qwen36_27b.sh` — Tier C server modes
+- `run_tier_c.sh` — end-to-end Tier C orchestration
+- `results_tier_c/` — raw 27B CSVs, server logs, environment, kernel configs
+- `plots_tier_c/` — final 27B figures
+- `results/`, `plots/` — earlier 4B and architecture-study evidence
+- `DEBUGLOG.md` — current, actionable failure ledger only
