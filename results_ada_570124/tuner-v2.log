@@ -1,0 +1,414 @@
+device=NVIDIA RTX 6000 Ada Generation candidates=288 M=[1, 16, 128, 512, 1024, 2048, 3072, 4096, 8192] weight_copies=4
+
+shape M=1 N=16384 K=5120
+    48/288 coarse=0.129ms (1.46x)
+    96/288 coarse=0.126ms (1.50x)
+   144/288 coarse=0.126ms (1.50x)
+   192/288 coarse=0.126ms (1.50x)
+   240/288 coarse=0.126ms (1.50x)
+   288/288 coarse=0.126ms (1.50x)
+  default=0.184ms best=0.122ms speedup=1.51x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 1, 'num_warps': 8, 'num_stages': 3}
+
+shape M=16 N=16384 K=5120
+    48/288 coarse=0.123ms (1.05x)
+    96/288 coarse=0.123ms (1.05x)
+   144/288 coarse=0.123ms (1.05x)
+   192/288 coarse=0.123ms (1.05x)
+   240/288 coarse=0.123ms (1.05x)
+   288/288 coarse=0.123ms (1.05x)
+  default=0.128ms best=0.121ms speedup=1.06x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=128 N=16384 K=5120
+    48/288 coarse=0.126ms (1.05x)
+    96/288 coarse=0.126ms (1.05x)
+   144/288 coarse=0.125ms (1.06x)
+   192/288 coarse=0.125ms (1.06x)
+   240/288 coarse=0.125ms (1.06x)
+   288/288 coarse=0.125ms (1.06x)
+  default=0.128ms best=0.124ms speedup=1.03x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 8, 'num_warps': 4, 'num_stages': 3}
+
+shape M=512 N=16384 K=5120
+    48/288 coarse=0.244ms (1.00x)
+    96/288 coarse=0.244ms (1.00x)
+   144/288 coarse=0.233ms (1.05x)
+   192/288 coarse=0.233ms (1.05x)
+   240/288 coarse=0.224ms (1.09x)
+   288/288 coarse=0.224ms (1.09x)
+  default=0.240ms best=0.218ms speedup=1.10x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=1024 N=16384 K=5120
+    48/288 coarse=0.479ms (1.00x)
+    96/288 coarse=0.479ms (1.00x)
+   144/288 coarse=0.420ms (1.14x)
+   192/288 coarse=0.420ms (1.14x)
+   240/288 coarse=0.420ms (1.14x)
+   288/288 coarse=0.420ms (1.14x)
+  default=0.462ms best=0.419ms speedup=1.10x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 3}
+
+shape M=2048 N=16384 K=5120
+    48/288 coarse=0.891ms (1.00x)
+    96/288 coarse=0.891ms (1.00x)
+   144/288 coarse=0.795ms (1.12x)
+   192/288 coarse=0.795ms (1.12x)
+   240/288 coarse=0.775ms (1.15x)
+   288/288 coarse=0.775ms (1.15x)
+  default=0.902ms best=0.794ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 8, 'num_stages': 3}
+
+shape M=3072 N=16384 K=5120
+    48/288 coarse=1.413ms (1.00x)
+    96/288 coarse=1.413ms (1.00x)
+   144/288 coarse=1.158ms (1.22x)
+   192/288 coarse=1.158ms (1.22x)
+   240/288 coarse=1.125ms (1.26x)
+   288/288 coarse=1.125ms (1.26x)
+  default=1.340ms best=1.171ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=16384 K=5120
+    48/288 coarse=1.801ms (1.00x)
+    96/288 coarse=1.801ms (1.00x)
+   144/288 coarse=1.548ms (1.16x)
+   192/288 coarse=1.548ms (1.16x)
+   240/288 coarse=1.487ms (1.21x)
+   288/288 coarse=1.487ms (1.21x)
+  default=1.790ms best=1.535ms speedup=1.17x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+
+shape M=8192 N=16384 K=5120
+    48/288 coarse=3.300ms (1.00x)
+    96/288 coarse=3.300ms (1.00x)
+   144/288 coarse=3.178ms (1.04x)
+   192/288 coarse=3.165ms (1.04x)
+   240/288 coarse=2.925ms (1.13x)
+   288/288 coarse=2.925ms (1.13x)
+  default=3.690ms best=3.109ms speedup=1.19x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2/N=16384,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=1 N=5120 K=6144
+    48/288 coarse=0.071ms (1.58x)
+    96/288 coarse=0.071ms (1.58x)
+   144/288 coarse=0.071ms (1.58x)
+   192/288 coarse=0.071ms (1.58x)
+   240/288 coarse=0.071ms (1.58x)
+   288/288 coarse=0.071ms (1.58x)
+  default=0.103ms best=0.066ms speedup=1.55x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 8, 'num_stages': 3}
+
+shape M=16 N=5120 K=6144
+    48/288 coarse=0.069ms (1.33x)
+    96/288 coarse=0.069ms (1.33x)
+   144/288 coarse=0.069ms (1.33x)
+   192/288 coarse=0.069ms (1.33x)
+   240/288 coarse=0.069ms (1.33x)
+   288/288 coarse=0.069ms (1.33x)
+  default=0.085ms best=0.067ms speedup=1.27x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 8, 'num_warps': 4, 'num_stages': 3}
+
+shape M=128 N=5120 K=6144
+    48/288 coarse=0.068ms (1.34x)
+    96/288 coarse=0.068ms (1.34x)
+   144/288 coarse=0.068ms (1.34x)
+   192/288 coarse=0.068ms (1.34x)
+   240/288 coarse=0.068ms (1.34x)
+   288/288 coarse=0.068ms (1.34x)
+  default=0.081ms best=0.066ms speedup=1.22x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 1, 'num_warps': 4, 'num_stages': 3}
+
+shape M=512 N=5120 K=6144
+    48/288 coarse=0.150ms (1.02x)
+    96/288 coarse=0.150ms (1.02x)
+   144/288 coarse=0.121ms (1.27x)
+   192/288 coarse=0.121ms (1.27x)
+   240/288 coarse=0.121ms (1.27x)
+   288/288 coarse=0.121ms (1.27x)
+  default=0.149ms best=0.121ms speedup=1.24x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=1024 N=5120 K=6144
+    48/288 coarse=0.212ms (1.00x)
+    96/288 coarse=0.212ms (1.00x)
+   144/288 coarse=0.183ms (1.16x)
+   192/288 coarse=0.183ms (1.16x)
+   240/288 coarse=0.183ms (1.16x)
+   288/288 coarse=0.183ms (1.16x)
+  default=0.210ms best=0.178ms speedup=1.18x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 3}
+
+shape M=2048 N=5120 K=6144
+    48/288 coarse=0.351ms (1.00x)
+    96/288 coarse=0.351ms (1.00x)
+   144/288 coarse=0.315ms (1.11x)
+   192/288 coarse=0.315ms (1.11x)
+   240/288 coarse=0.310ms (1.13x)
+   288/288 coarse=0.310ms (1.13x)
+  default=0.344ms best=0.314ms speedup=1.10x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=3072 N=5120 K=6144
+    48/288 coarse=0.482ms (1.00x)
+    96/288 coarse=0.482ms (1.00x)
+   144/288 coarse=0.458ms (1.05x)
+   192/288 coarse=0.458ms (1.05x)
+   240/288 coarse=0.432ms (1.12x)
+   288/288 coarse=0.432ms (1.12x)
+  default=0.502ms best=0.439ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 4, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=5120 K=6144
+    48/288 coarse=0.686ms (1.00x)
+    96/288 coarse=0.686ms (1.00x)
+   144/288 coarse=0.590ms (1.16x)
+   192/288 coarse=0.590ms (1.16x)
+   240/288 coarse=0.590ms (1.16x)
+   288/288 coarse=0.590ms (1.16x)
+  default=0.672ms best=0.598ms speedup=1.12x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 3}
+
+shape M=8192 N=5120 K=6144
+    48/288 coarse=1.321ms (1.00x)
+    96/288 coarse=1.321ms (1.00x)
+   144/288 coarse=1.148ms (1.15x)
+   192/288 coarse=1.148ms (1.15x)
+   240/288 coarse=1.145ms (1.15x)
+   288/288 coarse=1.145ms (1.15x)
+  default=1.326ms best=1.176ms speedup=1.13x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2/N=5120,K=6144,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=1 N=34816 K=5120
+    48/288 coarse=0.229ms (1.44x)
+    96/288 coarse=0.225ms (1.46x)
+   144/288 coarse=0.225ms (1.46x)
+   192/288 coarse=0.225ms (1.46x)
+   240/288 coarse=0.225ms (1.46x)
+   288/288 coarse=0.225ms (1.46x)
+  default=0.290ms best=0.224ms speedup=1.30x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 8, 'num_stages': 3}
+
+shape M=16 N=34816 K=5120
+    48/288 coarse=0.225ms (1.04x)
+    96/288 coarse=0.225ms (1.04x)
+   144/288 coarse=0.225ms (1.04x)
+   192/288 coarse=0.225ms (1.04x)
+   240/288 coarse=0.225ms (1.04x)
+   288/288 coarse=0.225ms (1.04x)
+  default=0.229ms best=0.225ms speedup=1.02x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 1, 'num_warps': 4, 'num_stages': 3}
+
+shape M=128 N=34816 K=5120
+    48/288 coarse=0.240ms (1.06x)
+    96/288 coarse=0.240ms (1.06x)
+   144/288 coarse=0.240ms (1.06x)
+   192/288 coarse=0.240ms (1.06x)
+   240/288 coarse=0.240ms (1.06x)
+   288/288 coarse=0.240ms (1.06x)
+  default=0.246ms best=0.240ms speedup=1.02x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=512 N=34816 K=5120
+    48/288 coarse=0.468ms (1.00x)
+    96/288 coarse=0.468ms (1.00x)
+   144/288 coarse=0.435ms (1.08x)
+   192/288 coarse=0.435ms (1.08x)
+   240/288 coarse=0.435ms (1.08x)
+   288/288 coarse=0.435ms (1.08x)
+  default=0.491ms best=0.453ms speedup=1.08x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+
+shape M=1024 N=34816 K=5120
+    48/288 coarse=0.914ms (1.00x)
+    96/288 coarse=0.914ms (1.00x)
+   144/288 coarse=0.840ms (1.09x)
+   192/288 coarse=0.840ms (1.09x)
+   240/288 coarse=0.840ms (1.09x)
+   288/288 coarse=0.840ms (1.09x)
+  default=0.965ms best=0.859ms speedup=1.12x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=2048 N=34816 K=5120
+    48/288 coarse=1.886ms (1.00x)
+    96/288 coarse=1.886ms (1.00x)
+   144/288 coarse=1.702ms (1.11x)
+   192/288 coarse=1.702ms (1.11x)
+   240/288 coarse=1.617ms (1.17x)
+   288/288 coarse=1.617ms (1.17x)
+  default=1.916ms best=1.710ms speedup=1.12x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=3072 N=34816 K=5120
+    48/288 coarse=2.602ms (1.00x)
+    96/288 coarse=2.602ms (1.00x)
+   144/288 coarse=2.558ms (1.02x)
+   192/288 coarse=2.558ms (1.02x)
+   240/288 coarse=2.388ms (1.09x)
+   288/288 coarse=2.388ms (1.09x)
+  default=2.959ms best=2.533ms speedup=1.17x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=34816 K=5120
+    48/288 coarse=3.437ms (1.00x)
+    96/288 coarse=3.437ms (1.00x)
+   144/288 coarse=3.437ms (1.00x)
+   192/288 coarse=3.437ms (1.00x)
+   240/288 coarse=3.190ms (1.08x)
+   288/288 coarse=3.190ms (1.08x)
+  default=3.979ms best=3.433ms speedup=1.16x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+
+shape M=8192 N=34816 K=5120
+    48/288 coarse=7.086ms (1.00x)
+    96/288 coarse=7.086ms (1.00x)
+   144/288 coarse=7.086ms (1.00x)
+   192/288 coarse=6.994ms (1.01x)
+   240/288 coarse=6.461ms (1.10x)
+   288/288 coarse=6.461ms (1.10x)
+  default=8.574ms best=6.744ms speedup=1.27x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2/N=34816,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=1 N=5120 K=17408
+    48/288 coarse=0.132ms (1.59x)
+    96/288 coarse=0.132ms (1.59x)
+   144/288 coarse=0.132ms (1.59x)
+   192/288 coarse=0.132ms (1.59x)
+   240/288 coarse=0.132ms (1.59x)
+   288/288 coarse=0.132ms (1.59x)
+  default=0.198ms best=0.131ms speedup=1.51x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 4, 'num_warps': 8, 'num_stages': 3}
+
+shape M=16 N=5120 K=17408
+    48/288 coarse=0.134ms (1.39x)
+    96/288 coarse=0.134ms (1.39x)
+   144/288 coarse=0.134ms (1.39x)
+   192/288 coarse=0.134ms (1.39x)
+   240/288 coarse=0.134ms (1.39x)
+   288/288 coarse=0.134ms (1.39x)
+  default=0.182ms best=0.133ms speedup=1.37x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 1, 'num_warps': 4, 'num_stages': 3}
+
+shape M=128 N=5120 K=17408
+    48/288 coarse=0.138ms (1.37x)
+    96/288 coarse=0.138ms (1.37x)
+   144/288 coarse=0.138ms (1.37x)
+   192/288 coarse=0.138ms (1.37x)
+   240/288 coarse=0.138ms (1.37x)
+   288/288 coarse=0.138ms (1.37x)
+  default=0.183ms best=0.137ms speedup=1.34x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 1, 'num_warps': 4, 'num_stages': 3}
+
+shape M=512 N=5120 K=17408
+    48/288 coarse=0.364ms (1.00x)
+    96/288 coarse=0.364ms (1.00x)
+   144/288 coarse=0.297ms (1.22x)
+   192/288 coarse=0.297ms (1.22x)
+   240/288 coarse=0.297ms (1.22x)
+   288/288 coarse=0.297ms (1.22x)
+  default=0.369ms best=0.293ms speedup=1.26x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=1024 N=5120 K=17408
+    48/288 coarse=0.569ms (1.00x)
+    96/288 coarse=0.569ms (1.00x)
+   144/288 coarse=0.478ms (1.19x)
+   192/288 coarse=0.478ms (1.19x)
+   240/288 coarse=0.478ms (1.19x)
+   288/288 coarse=0.478ms (1.19x)
+  default=0.551ms best=0.473ms speedup=1.16x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 4, 'num_stages': 3}
+
+shape M=2048 N=5120 K=17408
+    48/288 coarse=1.001ms (1.00x)
+    96/288 coarse=1.001ms (1.00x)
+   144/288 coarse=0.865ms (1.16x)
+   192/288 coarse=0.865ms (1.16x)
+   240/288 coarse=0.852ms (1.17x)
+   288/288 coarse=0.852ms (1.17x)
+  default=1.008ms best=0.870ms speedup=1.16x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=3072 N=5120 K=17408
+    48/288 coarse=1.546ms (1.00x)
+    96/288 coarse=1.546ms (1.00x)
+   144/288 coarse=1.304ms (1.18x)
+   192/288 coarse=1.304ms (1.18x)
+   240/288 coarse=1.202ms (1.29x)
+   288/288 coarse=1.202ms (1.29x)
+  default=1.478ms best=1.237ms speedup=1.19x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=5120 K=17408
+    48/288 coarse=1.825ms (1.00x)
+    96/288 coarse=1.825ms (1.00x)
+   144/288 coarse=1.691ms (1.08x)
+   192/288 coarse=1.691ms (1.08x)
+   240/288 coarse=1.691ms (1.08x)
+   288/288 coarse=1.691ms (1.08x)
+  default=1.960ms best=1.740ms speedup=1.13x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+
+shape M=8192 N=5120 K=17408
+    48/288 coarse=4.002ms (1.00x)
+    96/288 coarse=4.002ms (1.00x)
+   144/288 coarse=3.331ms (1.20x)
+   192/288 coarse=3.331ms (1.20x)
+   240/288 coarse=3.214ms (1.25x)
+   288/288 coarse=3.214ms (1.25x)
+  default=3.904ms best=3.439ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2/N=5120,K=17408,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=1 N=14336 K=5120
+    48/288 coarse=0.111ms (1.65x)
+    96/288 coarse=0.111ms (1.65x)
+   144/288 coarse=0.111ms (1.65x)
+   192/288 coarse=0.111ms (1.65x)
+   240/288 coarse=0.111ms (1.65x)
+   288/288 coarse=0.111ms (1.65x)
+  default=0.152ms best=0.110ms speedup=1.38x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 4, 'num_warps': 8, 'num_stages': 3}
+
+shape M=16 N=14336 K=5120
+    48/288 coarse=0.109ms (1.07x)
+    96/288 coarse=0.109ms (1.07x)
+   144/288 coarse=0.109ms (1.07x)
+   192/288 coarse=0.109ms (1.07x)
+   240/288 coarse=0.109ms (1.07x)
+   288/288 coarse=0.109ms (1.07x)
+  default=0.114ms best=0.108ms speedup=1.06x max_abs=0.0000 config={'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 3}
+
+shape M=128 N=14336 K=5120
+    48/288 coarse=0.115ms (1.05x)
+    96/288 coarse=0.115ms (1.05x)
+   144/288 coarse=0.112ms (1.08x)
+   192/288 coarse=0.112ms (1.08x)
+   240/288 coarse=0.112ms (1.08x)
+   288/288 coarse=0.112ms (1.08x)
+  default=0.115ms best=0.111ms speedup=1.04x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=512 N=14336 K=5120
+    48/288 coarse=0.242ms (1.00x)
+    96/288 coarse=0.242ms (1.00x)
+   144/288 coarse=0.214ms (1.13x)
+   192/288 coarse=0.214ms (1.13x)
+   240/288 coarse=0.214ms (1.13x)
+   288/288 coarse=0.214ms (1.13x)
+  default=0.236ms best=0.212ms speedup=1.11x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 4, 'num_stages': 3}
+
+shape M=1024 N=14336 K=5120
+    48/288 coarse=0.425ms (1.00x)
+    96/288 coarse=0.425ms (1.00x)
+   144/288 coarse=0.382ms (1.11x)
+   192/288 coarse=0.382ms (1.11x)
+   240/288 coarse=0.382ms (1.11x)
+   288/288 coarse=0.382ms (1.11x)
+  default=0.401ms best=0.378ms speedup=1.06x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 3}
+
+shape M=2048 N=14336 K=5120
+    48/288 coarse=0.746ms (1.00x)
+    96/288 coarse=0.746ms (1.00x)
+   144/288 coarse=0.724ms (1.03x)
+   192/288 coarse=0.724ms (1.03x)
+   240/288 coarse=0.704ms (1.06x)
+   288/288 coarse=0.704ms (1.06x)
+  default=0.822ms best=0.725ms speedup=1.13x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=3072 N=14336 K=5120
+    48/288 coarse=1.254ms (1.00x)
+    96/288 coarse=1.254ms (1.00x)
+   144/288 coarse=1.048ms (1.20x)
+   192/288 coarse=1.048ms (1.20x)
+   240/288 coarse=1.028ms (1.22x)
+   288/288 coarse=1.028ms (1.22x)
+  default=1.212ms best=1.073ms speedup=1.13x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=14336 K=5120
+    48/288 coarse=1.777ms (1.00x)
+    96/288 coarse=1.777ms (1.00x)
+   144/288 coarse=1.380ms (1.29x)
+   192/288 coarse=1.380ms (1.29x)
+   240/288 coarse=1.367ms (1.30x)
+   288/288 coarse=1.367ms (1.30x)
+  default=1.624ms best=1.429ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+
+shape M=8192 N=14336 K=5120
+    48/288 coarse=3.011ms (1.00x)
+    96/288 coarse=3.011ms (1.00x)
+   144/288 coarse=2.753ms (1.09x)
+   192/288 coarse=2.753ms (1.09x)
+   240/288 coarse=2.637ms (1.14x)
+   288/288 coarse=2.637ms (1.14x)
+  default=3.310ms best=2.763ms speedup=1.20x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2/N=14336,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+completed in 899.6s
+[fp8-tuner-v2-4096: exited; cursor=19535]

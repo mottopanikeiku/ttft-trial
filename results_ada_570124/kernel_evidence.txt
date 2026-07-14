@@ -1,0 +1,66 @@
+RTX 6000 Ada low-level evidence, 2026-07-14
+
+Environment
+-----------
+GPU: NVIDIA RTX 6000 Ada Generation, SM 8.9
+Driver: 570.124.06
+CUDA runtime: 12.8
+vLLM: 0.19.1
+Triton: 3.6.0
+
+Triton block-FP8 code generation
+--------------------------------
+The generated _w8a8_triton_block_scaled_mm PTX contains repeated instructions:
+
+  mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32
+
+The Triton metadata for the inspected 8-warp, 3-stage kernel reports:
+
+  shared: 74752 bytes
+  num_warps: 8
+  num_stages: 3
+
+Command:
+
+  cuobjdump --dump-resource-usage \
+    /root/.triton/cache/23L56BOHNJHX6IHY4KIDYQDSYHNRKC47R3JP7DDTVT6RGPRYNA6Q/_w8a8_triton_block_scaled_mm.cubin
+
+Observed resource output:
+
+  Function _w8a8_triton_block_scaled_mm:
+  REG:154 STACK:0 SHARED:0 LOCAL:0 CONSTANT[0]:448
+
+SHARED:0 in cuobjdump is not used as a substitute for Triton's 74,752-byte
+launch metadata; both raw observations are reported as emitted by their tools.
+
+Focused 4096-token PyTorch profile
+----------------------------------
+CUDA kernel total: 990.376 ms
+_w8a8_triton_block_scaled_mm: 774.568 ms (78.21%)
+vllm::gdn_attention_core: 27.472 ms
+FlashAttention forward: 26.026 ms
+per-token-group FP8 activation quantization: 26.026 ms
+
+Source: profile/profiler_out_0.txt and the compressed trace in profile/.
+Profiling increased client TTFT to 2228.4 ms, so the profile is used only for
+attribution, never as the normal request-latency result.
+
+Per-channel CUTLASS microbenchmark at M=4096
+--------------------------------------------
+Shape N=16384 K=5120: 1.324 ms
+Shape N=5120 K=6144: 0.605 ms
+Shape N=34816 K=5120: 2.801 ms
+Shape N=5120 K=17408: 1.334 ms
+Shape N=14336 K=5120: 1.208 ms
+Sum: 7.271 ms
+
+The exhaustive tuned block-FP8 times sum to 8.714 ms for the same shapes.
+This motivated the channelwise requantization experiment, but its end-to-end
+4096 p50 was 1111.0 ms, slower than the best unmodified-weight cell. The
+microbenchmark is not reported as a serving speedup.
+
+Nsight Compute
+--------------
+The saved report contains launch/resource data. Hardware performance-counter
+sections failed with ERR_NVGPUCTRPERM because this pod does not grant counter
+access. No counter values are inferred.

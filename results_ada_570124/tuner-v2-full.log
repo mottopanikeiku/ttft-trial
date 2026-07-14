@@ -1,0 +1,119 @@
+device=NVIDIA RTX 6000 Ada Generation candidates=1280 M=[4096] weight_copies=4
+
+shape M=4096 N=16384 K=5120
+    48/1280 coarse=1.742ms (1.00x)
+    96/1280 coarse=1.742ms (1.00x)
+   144/1280 coarse=1.742ms (1.00x)
+   192/1280 coarse=1.742ms (1.00x)
+   288/1280 coarse=1.742ms (1.00x)
+   336/1280 coarse=1.742ms (1.00x)
+   384/1280 coarse=1.742ms (1.00x)
+   432/1280 coarse=1.742ms (1.00x)
+   480/1280 coarse=1.742ms (1.00x)
+   528/1280 coarse=1.742ms (1.00x)
+   576/1280 coarse=1.742ms (1.00x)
+   624/1280 coarse=1.742ms (1.00x)
+   672/1280 coarse=1.676ms (1.04x)
+   720/1280 coarse=1.518ms (1.15x)
+   816/1280 coarse=1.518ms (1.15x)
+   864/1280 coarse=1.518ms (1.15x)
+   912/1280 coarse=1.518ms (1.15x)
+  1056/1280 coarse=1.501ms (1.16x)
+  1104/1280 coarse=1.501ms (1.16x)
+  default=1.746ms best=1.533ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2_full/N=16384,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=4096 N=5120 K=6144
+    48/1280 coarse=0.629ms (1.00x)
+    96/1280 coarse=0.629ms (1.00x)
+   144/1280 coarse=0.629ms (1.00x)
+   192/1280 coarse=0.629ms (1.00x)
+   288/1280 coarse=0.629ms (1.00x)
+   336/1280 coarse=0.629ms (1.00x)
+   384/1280 coarse=0.629ms (1.00x)
+   432/1280 coarse=0.629ms (1.00x)
+   480/1280 coarse=0.629ms (1.00x)
+   528/1280 coarse=0.629ms (1.00x)
+   576/1280 coarse=0.629ms (1.00x)
+   624/1280 coarse=0.629ms (1.00x)
+   672/1280 coarse=0.629ms (1.00x)
+   720/1280 coarse=0.609ms (1.03x)
+   816/1280 coarse=0.609ms (1.03x)
+   864/1280 coarse=0.609ms (1.03x)
+   912/1280 coarse=0.609ms (1.03x)
+  1056/1280 coarse=0.609ms (1.03x)
+  1104/1280 coarse=0.609ms (1.03x)
+  default=0.688ms best=0.601ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 8, 'num_warps': 4, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2_full/N=5120,K=6144,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=4096 N=34816 K=5120
+    48/1280 coarse=3.381ms (1.00x)
+    96/1280 coarse=3.381ms (1.00x)
+   144/1280 coarse=3.381ms (1.00x)
+   192/1280 coarse=3.381ms (1.00x)
+   288/1280 coarse=3.381ms (1.00x)
+   336/1280 coarse=3.381ms (1.00x)
+   384/1280 coarse=3.381ms (1.00x)
+   432/1280 coarse=3.381ms (1.00x)
+   480/1280 coarse=3.381ms (1.00x)
+   528/1280 coarse=3.381ms (1.00x)
+   576/1280 coarse=3.381ms (1.00x)
+   624/1280 coarse=3.381ms (1.00x)
+   672/1280 coarse=3.381ms (1.00x)
+   720/1280 coarse=3.381ms (1.00x)
+   816/1280 coarse=3.381ms (1.00x)
+   864/1280 coarse=3.381ms (1.00x)
+   912/1280 coarse=3.381ms (1.00x)
+  1056/1280 coarse=3.236ms (1.04x)
+  1104/1280 coarse=3.236ms (1.04x)
+  default=4.064ms best=3.408ms speedup=1.19x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2_full/N=34816,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=4096 N=5120 K=17408
+    48/1280 coarse=1.914ms (1.00x)
+    96/1280 coarse=1.914ms (1.00x)
+   144/1280 coarse=1.914ms (1.00x)
+   192/1280 coarse=1.914ms (1.00x)
+   288/1280 coarse=1.914ms (1.00x)
+   336/1280 coarse=1.914ms (1.00x)
+   384/1280 coarse=1.914ms (1.00x)
+   432/1280 coarse=1.914ms (1.00x)
+   480/1280 coarse=1.914ms (1.00x)
+   528/1280 coarse=1.914ms (1.00x)
+   576/1280 coarse=1.914ms (1.00x)
+   624/1280 coarse=1.914ms (1.00x)
+   672/1280 coarse=1.914ms (1.00x)
+   720/1280 coarse=1.655ms (1.16x)
+   816/1280 coarse=1.655ms (1.16x)
+   864/1280 coarse=1.655ms (1.16x)
+   912/1280 coarse=1.655ms (1.16x)
+  1056/1280 coarse=1.655ms (1.16x)
+  1104/1280 coarse=1.655ms (1.16x)
+  default=1.971ms best=1.736ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 3}
+  wrote results_ada_570124/fp8_configs_v2_full/N=5120,K=17408,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+shape M=4096 N=14336 K=5120
+    48/1280 coarse=1.522ms (1.00x)
+    96/1280 coarse=1.522ms (1.00x)
+   144/1280 coarse=1.522ms (1.00x)
+   192/1280 coarse=1.522ms (1.00x)
+   288/1280 coarse=1.522ms (1.00x)
+   336/1280 coarse=1.522ms (1.00x)
+   384/1280 coarse=1.522ms (1.00x)
+   432/1280 coarse=1.522ms (1.00x)
+   480/1280 coarse=1.522ms (1.00x)
+   528/1280 coarse=1.522ms (1.00x)
+   576/1280 coarse=1.522ms (1.00x)
+   624/1280 coarse=1.522ms (1.00x)
+   672/1280 coarse=1.522ms (1.00x)
+   720/1280 coarse=1.382ms (1.10x)
+   816/1280 coarse=1.382ms (1.10x)
+   864/1280 coarse=1.382ms (1.10x)
+   912/1280 coarse=1.382ms (1.10x)
+  1056/1280 coarse=1.382ms (1.10x)
+  1104/1280 coarse=1.382ms (1.10x)
+  default=1.644ms best=1.436ms speedup=1.14x max_abs=0.0000 config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 4}
+  wrote results_ada_570124/fp8_configs_v2_full/N=14336,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json
+
+completed in 1972.5s
+[fp8-tuner-full: exited; cursor=5222]

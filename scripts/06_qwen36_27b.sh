@@ -19,11 +19,11 @@ set -euo pipefail
 export HF_HOME="${HF_HOME:-/workspace/hf}"
 
 MODEL="Qwen/Qwen3.6-27B-FP8"
-MODE="${1:-optimized}"   # usage: bash scripts/06_qwen36_27b.sh [vanilla|tuned|optimized|cache-all|aggressive]
+MODE="${1:-cold}"   # usage: bash scripts/06_qwen36_27b.sh [vanilla|tuned|cold|ada-channel|optimized|cache-all|aggressive]
 case "$MODE" in
-  vanilla|tuned|optimized|cache-all|aggressive) ;;
+  vanilla|tuned|cold|ada-channel|optimized|cache-all|aggressive) ;;
   *)
-    echo "usage: $0 [vanilla|tuned|optimized|cache-all|aggressive]" >&2
+    echo "usage: $0 [vanilla|tuned|cold|ada-channel|optimized|cache-all|aggressive]" >&2
     exit 2
     ;;
 esac
@@ -49,6 +49,40 @@ elif [[ "$MODE" == "tuned" ]]; then
     --language-model-only \
     --max-model-len 8192 \
     --max-cudagraph-capture-size 256 \
+    --reasoning-parser qwen3
+elif [[ "$MODE" == "cold" ]]; then
+  # Cold-path winner on RTX 6000 Ada. The 8192-token scheduler budget keeps a
+  # 4096-token prompt in one prefill step, async scheduling removes avoidable
+  # CPU-side gaps, and prefix caching stays off because every measured request
+  # has a unique first block. Install the dense-M configs from
+  # bench/tune_qwen36_fp8.py before launching this mode.
+  vllm serve "$MODEL" \
+    --host 0.0.0.0 --port 8000 \
+    --language-model-only \
+    --max-model-len 8192 \
+    --max-cudagraph-capture-size 256 \
+    --max-num-batched-tokens 8192 \
+    --no-enable-prefix-caching \
+    --async-scheduling \
+    --disable-log-stats \
+    --reasoning-parser qwen3
+elif [[ "$MODE" == "ada-channel" ]]; then
+  # Experimental SM 8.9 path: requantize block-FP8 weights per output channel
+  # at load time, then use vLLM's CUTLASS FP8 GEMM. This is not lossless and
+  # model quality has to be validated separately. sitecustomize applies in
+  # every spawned engine process without modifying the installed vLLM package.
+  ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  PYTHONPATH="$ROOT/bench/ada_channel_fp8${PYTHONPATH:+:$PYTHONPATH}" \
+  VLLM_ADA_CHANNEL_FP8=1 \
+  vllm serve "$MODEL" \
+    --host 0.0.0.0 --port 8000 \
+    --language-model-only \
+    --max-model-len 8192 \
+    --max-cudagraph-capture-size 256 \
+    --max-num-batched-tokens 8192 \
+    --no-enable-prefix-caching \
+    --async-scheduling \
+    --disable-log-stats \
     --reasoning-parser qwen3
 elif [[ "$MODE" == "optimized" ]]; then
   # Evidence-based config from Tier A (scripts/03 header, results/speedup.md):

@@ -1,0 +1,2 @@
+label,api,cache_mode,prompt_tokens,concurrency,request_idx,ttft_s,e2e_s,out_chunks
+qwen36-27b-profile-4096,completions,cold,4096,1,0,2.2283776253461838,2.2283776253461838,1

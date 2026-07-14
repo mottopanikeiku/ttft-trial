@@ -1,0 +1,49 @@
+device=NVIDIA RTX 6000 Ada Generation candidates=144
+
+shape M=4096 N=16384 K=5120
+   24/144 best=1.730ms (1.00x)
+   48/144 best=1.730ms (1.00x)
+   72/144 best=1.508ms (1.15x)
+   96/144 best=1.508ms (1.15x)
+  120/144 best=1.504ms (1.15x)
+  144/144 best=1.504ms (1.15x)
+  wrote results_ada_570124/fp8_configs_v1/N=16384,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json; default=1.730ms best=1.504ms speedup=1.15x config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 8, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=5120 K=6144
+   24/144 best=0.691ms (1.00x)
+   48/144 best=0.691ms (1.00x)
+   72/144 best=0.601ms (1.15x)
+   96/144 best=0.601ms (1.15x)
+  120/144 best=0.601ms (1.15x)
+  144/144 best=0.601ms (1.15x)
+  wrote results_ada_570124/fp8_configs_v1/N=5120,K=6144,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json; default=0.691ms best=0.601ms speedup=1.15x config={'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 3}
+
+shape M=4096 N=34816 K=5120
+   24/144 best=3.623ms (1.00x)
+   48/144 best=3.623ms (1.00x)
+   72/144 best=3.307ms (1.10x)
+   96/144 best=3.307ms (1.10x)
+  120/144 best=3.076ms (1.18x)
+  144/144 best=3.076ms (1.18x)
+  wrote results_ada_570124/fp8_configs_v1/N=34816,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json; default=3.623ms best=3.076ms speedup=1.18x config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=5120 K=17408
+   24/144 best=1.836ms (1.00x)
+   48/144 best=1.836ms (1.00x)
+   72/144 best=1.664ms (1.10x)
+   96/144 best=1.664ms (1.10x)
+  120/144 best=1.661ms (1.11x)
+  144/144 best=1.661ms (1.11x)
+  wrote results_ada_570124/fp8_configs_v1/N=5120,K=17408,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json; default=1.836ms best=1.661ms speedup=1.11x config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 16, 'num_warps': 8, 'num_stages': 3}
+
+shape M=4096 N=14336 K=5120
+   24/144 best=1.515ms (1.00x)
+   48/144 best=1.515ms (1.00x)
+   72/144 best=1.398ms (1.08x)
+   96/144 best=1.398ms (1.08x)
+  120/144 best=1.349ms (1.12x)
+  144/144 best=1.349ms (1.12x)
+  wrote results_ada_570124/fp8_configs_v1/N=14336,K=5120,device_name=NVIDIA_RTX_6000_Ada_Generation,dtype=fp8_w8a8,block_shape=[128,128].json; default=1.515ms best=1.349ms speedup=1.12x config={'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 3}
+
+completed in 184.9s
+[fp8-tuner-v1: exited; cursor=2695]

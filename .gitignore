@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .hf/
 *.log
+!results_ada_570124/*.log

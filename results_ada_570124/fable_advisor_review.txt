@@ -1,0 +1,195 @@
+Repo reviewed: `REPORT.md`, `DEBUGLOG.md`, `EXECUTION.md`, all Tier-C CSVs/summaries, `scripts/06_qwen36_27b.sh`, and `bench/tune_qwen36_fp8.py`. Advice below is grounded in that evidence. One important anomaly in your own data drives the top-priority experiment.
+
+---
+
+# 0. What the checked-in evidence actually says
+
+| cell (cold, c=1, 4096 tok) | p50 | p99 |
+|---|---:|---:|
+| vanilla | 1193.8 | 1198.1 |
+| tuned (FP8 configs, vanilla flags) | 1193.4 | 1206.0 |
+| optimized (no tuned configs… nominally) | 1251.6 | 1261.7 |
+| tuned + optimized | **1063.2** | 1085.3 |
+| sub1 (3072 tok, tuned) | 839.7 | 856.5 |
+
+**The anomaly:** tuned-alone is *identical* to vanilla at every prompt length (speedup 1.00 across the whole matrix), yet tuned+optimized wins 130 ms at 4096. Microkernels measured 1.13–1.16×. The only flag difference between the two server modes is `--max-num-batched-tokens 8192` (plus prefix caching / mem-util). That is a strong signature of one of two mechanisms:
+
+1. **Chunked prefill in vanilla mode splits 4096 into smaller chunks** (vLLM's default token budget), so the GEMMs run at M=2048 or less — and your config JSONs only contain keys `{"1", "4096"}`. vLLM selects the config whose key is *nearest to the actual M*. For M=2048, `|2048−1| = 2047 < |2048−4096| = 2048` → it picks the **default** config. Your tuned entry literally never fires except in single-chunk mode.
+2. Even if chunks were 4096, per-shape M at the last ragged chunk differs.
+
+Either way the conclusion is the same: **the tuner's single-M output is the bug, and the “tuned” full matrix was a placebo run.** This is cheap to confirm on-pod (one grep of the server log line `Using configuration from … for W8A8 Block FP8 kernel` per mode, plus `inspect.getsource` of the config-selection function in `vllm/model_executor/layers/quantization/utils/fp8_utils.py`).
+
+**Budget math** (from your own BACKGROUND.md, refined): 2·27e9·4096 ≈ 221 TFLOP of GEMM. RTX 6000 Ada FP8 dense ≈ 364 TFLOP/s → **~610 ms GEMM floor at 100% efficiency**. You're at 1063 ms total. Sub-1s p50 needs −63 ms (−6%); sub-1s p99 needs −86 ms (−8%). This is *not* a factor-of-2 problem; it's a "recover 3 medium overheads" problem. Feasible verdict: **p50 < 1 s likely; p99 < 1 s plausible but requires clock stability + the tuner fix + one scheduler win.**
+
+Also note: your fresh pod driver is 570.124.06; the checked-in numbers were on 570.195.03. Re-baseline (P1 cell A) before comparing anything against the repo CSVs.
+
+---
+
+# 1. Gate 0 — disk triage (free, before any GPU minute)
+
+50 GB quota; current: 11 TGI venv + 9.6 uv cache + 7.6 Qwen3-4B + 14 partial 27B = 42.2 GB.
+
+- **Delete:** TGI venv (DEBUGLOG §11 disposition says never resume it) and the uv cache → frees 20.6 GB. vLLM 0.19.1 is already installed; the uv cache is pure re-downloadable dead weight.
+- **Keep:** the 14 GB partial 27B cache — HF hub resumes blob downloads; deleting it doubles paid download time. Keep Qwen3-4B (7.6 GB) for the secondary goal.
+- End state: 7.6 (4B) + 29 (full 27B) ≈ 36.6 GB, ~13 GB headroom. That headroom must also hold profiler output — **cap nsys captures** (`--duration`, single request) or they'll eat gigabytes.
+- If anything else forces pressure: drop the 4B cache first (secondary goal, cheap re-fetch), never the 27B.
+
+---
+
+# 2. Bottleneck model to validate first
+
+Prefill time at 4096 tokens decomposes into:
+
+1. **Block-FP8 GEMMs** (Triton `_w8a8_triton_block_scaled_mm`; SM89 has no CUTLASS block-scale path in vLLM 0.19) — expected 60–75%.
+2. **GDN/DeltaNet prefill kernels** (Triton chunked delta-rule scan + causal-conv1d; 3 of every 4 layers) — the wildcard; nobody has tuned these for Ada.
+3. **Full-attention prefill** (FA2 via vllm-flash-attn, 1 in 4 layers) — expected small.
+4. Fixed: tokenize 4096 tokens, schedule, sample first token, detokenize, SSE flush, HTTP — expected 20–50 ms total.
+
+Everything below is prioritized to first *measure* this split (P0), because the plan forks on it: GEMM-dominant → P2/P3; GDN ≥ 25% → P4 rises above P3.
+
+---
+
+# 3. Prioritized experiments
+
+## P0 — One-request profile (~15 min GPU, one server boot)
+
+Boot the tuned+optimized config (your current best) with the torch profiler armed:
+
+```bash
+VLLM_TORCH_PROFILER_DIR=/workspace/traces \
+  bash scripts/06_qwen36_27b.sh optimized   # with fp8 configs installed
+# in the client shell, around exactly one cold 4096-token request:
+curl -X POST localhost:8000/start_profile
+python bench/benchmark_ttft.py --label profile-4096 --prompt-tokens 4096 \
+  --concurrency 1 --cache-modes cold --num-requests 1 --tokenizer Qwen/Qwen3.6-27B-FP8 \
+  --url http://localhost:8000 --out /tmp
+curl -X POST localhost:8000/stop_profile
+```
+
+While the server is up, also capture:
+- `curl localhost:8000/metrics | grep time_to_first_token` → server-side TTFT histogram vs client TTFT = transport/API overhead bound.
+- The startup log lines: chosen attention backend, chunked-prefill token budget, and the `W8A8 Block FP8` config-selection line (this confirms/refutes the nearest-M hypothesis for free).
+- `nvidia-smi -q -d CLOCK,PERFORMANCE` during the request → throttle reasons. If you can, `sudo nvidia-smi -pm 1 && sudo nvidia-smi -lgc <base>,<boost>`; locked clocks are the cheapest p99 insurance available. If the pod forbids it, record clocks per run instead.
+
+**Analysis (CPU, free):** open the trace in Perfetto; bucket CUDA time into {block-FP8 GEMM, GDN kernels, flash-attn, elementwise/norm/rope, gaps}. Compute achieved GEMM TFLOPS = 221 TFLOP / GEMM-bucket-seconds.
+
+**Decision gate G1:**
+- GEMM ≥ 60% and achieved < 55% of 364 TFLOP/s → P2 + P3 carry the campaign.
+- GDN ≥ 25% → insert P4 before P3.
+- Gaps/fixed ≥ 80 ms → a scheduler/overhead item is hiding; inspect trace gaps before spending on kernels.
+
+Optional deeper capture (only if the torch trace is ambiguous): run a 20 s `nsys profile -t cuda,nvtx -o /workspace/nsys/ttft --cuda-graph-trace=node --duration 20` window over 3 requests. Do not run nsys over full 24-sample cells.
+
+## P1 — Scheduler/flag isolation for the *cold headline* config (~2–3 h GPU, dominated by ~5 server boots)
+
+Your "optimized" flags were designed for the warm/prefix story; they are actively wrong for the cold headline (optimized cold 4096 = 1251.6 > vanilla 1193.8). Isolate, with tuned configs installed in all cells, cold 4096 c=1, N=24 each:
+
+| cell | flags (delta from `--language-model-only --max-model-len 8192 --max-cudagraph-capture-size 256`) | question |
+|---|---|---|
+| A | none (vanilla) | re-baseline on new driver |
+| B | `--max-num-batched-tokens 8192` | single-chunk prefill alone (predicted ≈ −100–130 ms; this is where the 1063 came from) |
+| C | B + `--no-enable-prefix-caching` | cold requests pay block hashing for a cache they can't hit; vLLM v1 enables prefix caching by default, which would also explain why the vanilla↔optimized gap wasn't caused by `--enable-prefix-caching` (a no-op). Predicted −10–60 ms. Confirm default via `vllm serve --help`. |
+| D | C + `--async-scheduling` (if present in 0.19.1) + `--disable-log-stats` | shave scheduler/step overhead; predicted −5–20 ms |
+| E | C with `--max-num-batched-tokens 4096` | verify 8192 vs 4096 budget is a wash for c=1 (guards against budget-dependent M in the ragged chunk) |
+
+One benchmark invocation per boot; reuse `run_tier_c.sh` lifecycle hygiene (DEBUGLOG §3 — kill the real `vllm serve` child, wait for port death). Also add a **3072-token cell to the winning config** — it re-validates the existing headline under the new driver for ~1 min extra.
+
+**Decision gate G2:** best of A–E ≤ ~1010 ms p50 → sub-1s is one tuner improvement away; proceed P2 and skip P5. Still ≥ 1100 → the flag space is exhausted; P2+P3 must deliver ≥ 10% GEMM or you escalate to P5.
+
+## P2 — Tuner v2: fix what the evidence says is broken (~30–45 min GPU, no server needed)
+
+Concrete defects in `bench/tune_qwen36_fp8.py` and fixes, in value order:
+
+1. **Dense M grid, not `{1, 4096}`.** Emit tuned entries for M ∈ {16, 32, 64, 128, 256, 512, 1024, 1536, 2048, 3072, 4096, 8192} (mirror the key set vLLM's official `benchmark_w8a8_block_fp8.py` uses). This makes the configs correct under *any* chunk budget and fixes the nearest-key placebo. Decode (M≈1–16) entries should be tuned too, not just copied from the default — free decode win, and it removes the risk that the nearest-key rule maps small prefill chunks onto a large-M config.
+2. **Defeat L2 residency in the microbenchmark.** The tuner reuses one weight tensor across warmup+iters; RTX 6000 Ada has 96 MB L2, so the N=16384,K=5120 weight (80 MB FP8) benchmarks fully L2-resident — unlike real prefill, where 60+ layers stream distinct weights. Allocate a ring of ≥3 weight/scale copies and rotate per iteration. Expect the optimum to shift toward configs with better DRAM behavior (larger GROUP_SIZE_M swizzle).
+3. **Search the full space at the headline Ms** (`--full` exists; use it for M ∈ {2048, 3072, 4096}): notably `BLOCK_SIZE_N=256` with `BLOCK_SIZE_K=64` at `num_stages=4` (24 KB/stage → 96 KB fits Ada's 100 KB smem, whereas your current winner 128×128×128 caps at 3 stages), and `GROUP_SIZE_M ∈ {1,4,8,64}`.
+4. **More iterations at the shortlist.** 5 iters × ~1 ms kernels is noisy at the 2–3% level you're now hunting; do a coarse pass at 5 iters, then re-rank the top 10 at 50 iters with CUDA-graph-launched replay or at least `torch.cuda._sleep`-separated timing.
+5. **Validate numerics** of the winning config against the default (max abs diff on random FP8 inputs) — a mis-tiled scale walk fails loudly here instead of in perplexity.
+
+Then rerun the P1-winning server config with the new JSONs installed: one boot, two cells (4096, 3072), 24 samples each. **This combination (P1 winner + P2 configs) is the most probable sub-1 s p50 path: −130 (already banked in B) − prefix-hash − per-M gains.**
+
+## P3 — PTX/ncu on the block-FP8 Triton kernel (~30 min GPU; patch effort gated)
+
+Before any Triton patching, two cheap checks:
+
+**(a) Confirm FP8 MMA is actually emitted.** Triton on SM89 supports e4m3 `dot`, but a dtype/layout misstep silently upcasts to FP16 and halves tensor throughput:
+
+```bash
+TRITON_KERNEL_DUMP=1 TRITON_DUMP_DIR=/workspace/triton_dump python bench/tune_qwen36_fp8.py ...
+grep -l 'mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32' /workspace/triton_dump/**/*.ptx
+```
+
+Absence of e4m3 MMA (i.e., `cvt`-to-f16 + `m16n8k16.f16` instead) = a genuine 2× GEMM bug worth patching. Presence = move on. SASS cross-check: `nvdisasm -c ~/.triton/cache/**/*.cubin` and look for conversion storms before the MMA sequences.
+
+**(b) ncu the champion config once per shape:**
+
+```bash
+ncu --set speedOfLight \
+  --kernel-name regex:_w8a8_triton_block_scaled_mm \
+  --launch-skip 20 --launch-count 3 \
+  python bench/tune_qwen36_fp8.py --only-best   # small driver mode; runs shortlist once
+```
+
+Metrics that decide: `sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed` (tensor-pipe utilization), `dram__throughput.avg.pct_of_peak_sustained_elapsed`, register-limited occupancy in the launch stats section.
+
+**Decision gate G3:** tensor pipe ≥ ~65% with DRAM < 70% → the kernel is near its ceiling for this algorithm; further Triton work is diminishing returns, stop. Tensor pipe < 50% and DRAM < 70% → there's real headroom; targeted Triton patches worth 0.5–1 day: per-block scale multiply hoisting (apply `b_scale` once per K-block instead of per-iteration FMA), `tl.dot(..., out_dtype)` accumulation pattern, software pipelining hints. Ada-specific reality check: SM89 has no TMA and no warp-specialization support in Triton, so Hopper-style rewrites don't transfer — expect single-digit % from Triton patches, not 30%.
+
+## P4 — GDN/DeltaNet prefill kernels (only if P0 shows ≥ 25%)
+
+Three of four layers are Gated DeltaNet; their chunked-scan prefill kernels are Triton with hardcoded/autotuned chunk sizes that nobody validated on Ada. If the P0 trace shows them heavy:
+- Identify the kernels in the trace (names like `chunk_gated_delta_rule_*`, `causal_conv1d_*`), find their launch configs in the vLLM/fla source, and microbench chunk size {32, 64, 128} × warps {4, 8} at seq 4096 exactly as the FP8 tuner does.
+- These are memory-bound scans on a 960 GB/s card; ncu DRAM% tells you instantly whether there's headroom.
+- This is patch-vLLM territory (constants in the kernel launcher), fully ablatable with one boot per variant.
+
+## P5 — The big swing, only if G2 fails: per-channel FP8 requant → CUTLASS `cutlass_scaled_mm` (~half day)
+
+vLLM's CUTLASS w8a8-FP8 path **does** support SM89 — but only per-tensor/per-channel scales; the 128×128 block-scale format is what forces the slower Triton path (DeepGEMM-style block CUTLASS is Hopper+). Writing a custom SM89 CUTLASS block-scale kernel is weeks of work — **not realistic inside this campaign; don't start it.**
+
+The realistic version: requantize the checkpoint to per-channel FP8 (llm-compressor, `FP8_DYNAMIC`), serve that, and let vLLM dispatch to CUTLASS. Expect CUTLASS at 70–80% of peak vs Triton block-scale at ~50–60% → plausibly −100–150 ms of GEMM time.
+
+Three mandatory caveats, state them in the report if used:
+1. **Legitimacy:** it is still full Qwen3.6-27B in FP8, but *not* the official `Qwen/Qwen3.6-27B-FP8` artifact. Get the team's ruling before spending the GPU time; report it as a clearly-labeled variant either way, never silently substituted.
+2. **Quality evidence required:** perplexity on a fixed shard + a small task eval vs the block-FP8 original; block scales exist because per-channel loses accuracy on outlier channels.
+3. **Free CPU pre-check:** inspect `weight_scale_inv` in the downloaded safetensors — if scales are near-constant along K per output block, folding is near-lossless and the risk collapses; if they vary >2× along K, expect measurable quality movement.
+4. **Disk:** a second 27B copy (~29 GB) does not fit the quota next to the original — requant in place of, not beside, and only after all block-FP8 experiments conclude.
+
+---
+
+# 4. Invalid / disallowed ideas — pre-emptively rejected
+
+- **Prefix-cache warm numbers as the headline** — already correctly excluded; the 117 ms figure stays in its own section.
+- **MTP / speculative decoding / draft models** — decode-only; zero TTFT effect (your script header already says this).
+- **`--kv-cache-dtype fp8` and `-O3`** — measured regression on this hybrid model (aggressive matrix); keep only as ablation evidence.
+- **The progressive prefix sweep** — DEBUGLOG §6: non-physical fit under Mamba `align` mode; do not resurrect the regression line.
+- **INT4/AWQ/GPTQ weights** — helps decode bandwidth, not compute-bound prefill (dequant-to-BF16 compute), and it's a different model class anyway.
+- **Extrapolating 4B kernel wins to 27B, or 3072-token wins to 4096** — the repo's own tuned-matrix placebo is the cautionary tale; every claim needs its own 24-sample cell.
+- **Shrinking `max_tokens`, dropping the nonce, or counting the first SSE keep-alive/empty chunk as “first content”** — harness integrity items; the harness is already correct, don't weaken it.
+- **TensorRT-LLM migration** — a full engine swap resets the entire evidence base and Qwen3.6's hybrid GDN support there is unproven; out of scope for this campaign.
+- **Reporting tuner microbenchmark ratios as TTFT speedups** — DEBUGLOG §8 rule stands.
+
+---
+
+# 5. Secondary: Qwen3-4B (only after G2 resolves, ~1–1.5 h)
+
+- Rerun the Tier-A core cells (FP8 vs BF16, 128–4096 tokens, c=1) on *this* GPU so the 4B speedups are same-hardware claims — the repo explicitly forbids cross-GPU comparison of the existing `results/` rows.
+- Apply tuner v2 to the 4B FP8 shapes (different N,K set — derive from the checkpoint config) with the dense-M grid; this doubles as an independent replication of the per-M-lookup fix on a second model.
+- Keep it to one boot per engine config; the 4B loads fast, so this is cheap GPU time.
+
+---
+
+# 6. Gate summary (paid-GPU-time discipline)
+
+| gate | cost | pass → | fail → |
+|---|---|---|---|
+| G0 disk plan | free | download resumes, ~13 GB headroom | drop 4B cache |
+| G1 profile split (P0) | ~15 min | GEMM-heavy → P2/P3; GDN-heavy → P4 | fixed-overhead hunt in trace gaps |
+| G2 flags (P1) + tuner v2 (P2) | ~3–4 h | p50 < 1 s → lock config, run final 24×{3072,4096} cells + p99 with locked clocks, done | escalate P5 (with team ruling) |
+| G3 ncu tensor-pipe % (P3) | ~30 min | <50% util → 0.5–1 day Triton patch, single ablation boot | stop kernel work |
+| final | ~30 min | full evidence pass: new CSVs, server logs, `environment.txt` refresh (driver differs from checked-in!), analyze.py regen | — |
+
+**Every accepted change ships as: one CSV cell (N=24, cold, exact-token), the server log proving which kernel/config actually ran, and a one-boot ablation against the previous best.** The tuned-matrix placebo already demonstrated why the server log line is part of the evidence, not optional.
+
+Most-probable sub-1s path, for the record: P1-B/C flags (single-chunk, no cold prefix hashing) + P2 dense-M/L2-cold-tuned configs ≈ 1193 → ~980–1020 ms p50, with locked clocks pulling p99 within ~15 ms of p50 (your existing p99−p50 spreads are already tiny). [INFERENCE] on the exact deltas — that's what the 24-sample cells are for.
+
+
+Wall time: 372.99 seconds

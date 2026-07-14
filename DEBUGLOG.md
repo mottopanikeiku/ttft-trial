@@ -157,3 +157,64 @@ Tier C measurement environment:
 - `Qwen/Qwen3.6-27B-FP8`
 
 At handoff, no GPU compute process remained. Focused harness tests passed before documentation cleanup; rerun `python -m unittest tests.test_ttft_harness` after any benchmark-code change.
+
+## 14. Larger prefill CUDA graphs do not fit the 27B hybrid state
+
+Explicit capture sizes of 512, 1024, 2048, and 4096 were tested with only the
+matching prefill graph plus size 1. Every server failed before readiness while
+allocating recurrent-state buffers. The 1024 case attempted 3.06 GiB with
+588.5 MiB free; the 2048 and 4096 cases attempted 6.12 and 12.25 GiB.
+
+The existing `--max-cudagraph-capture-size 256` is therefore the largest
+stable measured setting on this 48 GB card. Chunking to a smaller graph was
+not promoted because it increases prefill steps and cannot solve the dominant
+GEMM time.
+
+## 15. Hardware performance counters are unavailable on this pod
+
+Nsight Compute attached and produced `.ncu-rep` files, but hardware-counter
+collection failed with `ERR_NVGPUCTRPERM`. The pod does not grant access to
+NVIDIA GPU performance counters.
+
+Do not invent occupancy, tensor-pipe utilization, or cache-hit measurements
+from the failed sections. The report uses only observable launch/resource
+facts: Triton PTX contains Ada FP8 `mma.sync`, the inspected cubin uses 154
+registers, and Triton metadata reports 74,752 bytes of shared memory.
+
+## 16. Channelwise CUTLASS requantization was a valid negative experiment
+
+SM 8.9 supports vLLM's per-channel CUTLASS FP8 GEMM but not its block-FP8
+CUTLASS GEMM. `bench/ada_channel_fp8/sitecustomize.py` therefore converts each
+loaded 128x128 block-scaled linear weight to per-output-channel FP8 and selects
+CUTLASS. The installed vLLM package and checkpoint files remain unchanged.
+
+The model booted, all 48 benchmark requests succeeded, and a deterministic
+smoke prompt answered “Paris.” However, this path changes weight quantization,
+has no task-quality evaluation, and produced 1111.0 ms p50 at 4096 tokens
+versus 1093.6 ms for the best unmodified-weight cell. It remains an explicitly
+named experiment and is not the default.
+
+## 17. Official Qwen3-4B FP8 is the clean same-GPU optimization
+
+On the same RTX 6000 Ada, driver, harness, and 4096-token cold workload, BF16
+produced 339.4 ms p50 and the official FP8 checkpoint produced 217.0 ms p50,
+a 1.56× speedup. Both cells completed 24/24 requests.
+
+Raising the prefill budget, disabling prefix caching, async scheduling, and
+explicit 3072/4096-token CUDA graphs did not improve the 4096 FP8 cell beyond
+noise. Keep the plain official-FP8 baseline as the reproducible 4B result.
+
+## 18. Current verified environment
+
+The 2026-07-14 validation environment is:
+
+- NVIDIA RTX 6000 Ada Generation, 49,140 MiB, SM 8.9
+- driver 570.124.06; CUDA runtime 12.8
+- Python 3.12.3
+- vLLM 0.19.1; torch 2.10.0+cu128; Triton 3.6.0
+- `Qwen/Qwen3.6-27B-FP8`
+- `Qwen/Qwen3-4B-Instruct-2507` BF16 and official FP8
+
+After the final server shutdown, `nvidia-smi` reported no GPU compute process.
+All current raw rows and environment evidence are under
+`results_ada_570124/`.
